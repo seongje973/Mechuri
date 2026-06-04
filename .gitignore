@@ -1,0 +1,35 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build artifacts
+dist/
+build/
+out/
+web-build/
+
+# Local env files / Secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+*.pem
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Expo / Metro cache
+.expo/
+.metro-health-check*

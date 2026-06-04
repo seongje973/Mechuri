@@ -11,9 +11,11 @@ import {
 
 interface HomeScreenProps {
   navigation: any;
+  isLoggedIn: boolean;
+  userProfile: any;
 }
 
-export default function HomeScreen({ navigation }: HomeScreenProps) {
+export default function HomeScreen({ navigation, isLoggedIn, userProfile }: HomeScreenProps) {
   // Simple check for time of day to display dynamic greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -64,7 +66,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         <View style={styles.row}>
           {/* Roulette Card */}
           <TouchableOpacity 
-            style={[styles.featureCard, styles.purpleCard]} 
+            style={[styles.featureCard, styles.goldCard]} 
             onPress={() => navigation.navigate('메뉴 추천')}
             activeOpacity={0.8}
           >
@@ -78,7 +80,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
           {/* Map Card */}
           <TouchableOpacity 
-            style={[styles.featureCard, styles.orangeCard]} 
+            style={[styles.featureCard, styles.amberCard]} 
             onPress={() => navigation.navigate('지도')}
             activeOpacity={0.8}
           >
@@ -117,18 +119,35 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         </ScrollView>
 
         {/* History / Analytics Quick Preview */}
-        <TouchableOpacity 
-          style={styles.historyPreviewCard}
-          onPress={() => navigation.navigate('마이페이지')}
-        >
-          <View style={styles.historyRow}>
-            <View>
-              <Text style={styles.historyTitle}>📅 최근에 먹은 메뉴 & 마이페이지</Text>
-              <Text style={styles.historyDesc}>식사 히스토리를 확인하고 취향을 관리해 보세요.</Text>
+        {isLoggedIn ? (
+          <TouchableOpacity 
+            style={styles.historyPreviewCard}
+            onPress={() => navigation.navigate('마이페이지')}
+          >
+            <View style={styles.historyRow}>
+              <View>
+                <Text style={styles.historyTitle}>📅 최근에 먹은 메뉴 & 마이페이지</Text>
+                <Text style={styles.historyDesc}>식사 히스토리를 확인하고 취향을 관리해 보세요.</Text>
+              </View>
+              <Text style={styles.historyArrow}>➔</Text>
             </View>
-            <Text style={styles.historyArrow}>➔</Text>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.historyPreviewCard, styles.goldPromoCard]}
+            onPress={() => navigation.navigate('마이페이지')}
+          >
+            <View style={styles.historyRow}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.promoTitle}>🐣 메추리 요정의 미식 분석</Text>
+                <Text style={styles.promoDesc}>3초 카카오 연동으로 내가 먹은 식단 분석과 알레르기 필터를 이용해 보세요!</Text>
+              </View>
+              <View style={styles.promoGoBadge}>
+                <Text style={styles.promoGoText}>로그인 ➔</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.footer}>MeChuri - premium food recommendation app</Text>
       </ScrollView>
@@ -139,7 +158,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#1c1917', // Warm Dark Stone Onyx (따뜻한 블랙/돌색)
   },
   container: {
     padding: 20,
@@ -154,7 +173,7 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#38bdf8',
+    color: '#fbbf24', // Warm Amber Gold
     letterSpacing: 1,
   },
   greeting: {
@@ -167,26 +186,26 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    backgroundColor: 'rgba(44, 40, 38, 0.9)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(251, 191, 36, 0.15)', // Gold border
   },
   profileEmoji: {
     fontSize: 22,
   },
   glassCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.75)',
+    backgroundColor: 'rgba(41, 37, 36, 0.75)', // Warm dark stone card
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(251, 191, 36, 0.12)', // Subtle Gold border
     marginBottom: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 18,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
     elevation: 10,
   },
   bannerRow: {
@@ -194,8 +213,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   bannerBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    color: '#38bdf8',
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    color: '#fbbf24', // Amber Gold
     fontSize: 12,
     fontWeight: '700',
     paddingVertical: 4,
@@ -210,15 +229,20 @@ const styles = StyleSheet.create({
   },
   bannerDesc: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: '#a8a29e', // Soft warm gray
     lineHeight: 20,
     marginBottom: 18,
   },
   bannerButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#f59e0b', // Vibrant Gold
     borderRadius: 14,
     paddingVertical: 12,
     alignItems: 'center',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   bannerButtonText: {
     color: '#ffffff',
@@ -244,17 +268,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
   },
-  purpleCard: {
-    backgroundColor: 'rgba(124, 58, 237, 0.15)',
-    borderColor: 'rgba(124, 58, 237, 0.25)',
+  goldCard: {
+    backgroundColor: 'rgba(251, 191, 36, 0.06)', // Golden card
+    borderColor: 'rgba(251, 191, 36, 0.18)',
   },
-  orangeCard: {
-    backgroundColor: 'rgba(249, 115, 22, 0.15)',
-    borderColor: 'rgba(249, 115, 22, 0.25)',
+  amberCard: {
+    backgroundColor: 'rgba(245, 158, 11, 0.06)', // Amber card
+    borderColor: 'rgba(245, 158, 11, 0.18)',
   },
   featureEmoji: {
     fontSize: 28,
@@ -268,7 +292,7 @@ const styles = StyleSheet.create({
   },
   featureDesc: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: '#a8a29e',
     lineHeight: 16,
     height: 48,
   },
@@ -277,13 +301,13 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 10,
   },
   arrowText: {
-    color: '#ffffff',
+    color: '#fbbf24',
     fontWeight: 'bold',
   },
   horizontalScroll: {
@@ -293,13 +317,13 @@ const styles = StyleSheet.create({
   moodChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    backgroundColor: 'rgba(41, 37, 36, 0.6)',
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginRight: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(251, 191, 36, 0.08)',
   },
   moodEmoji: {
     fontSize: 16,
@@ -311,11 +335,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   historyPreviewCard: {
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(41, 37, 36, 0.4)',
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(251, 191, 36, 0.08)',
     marginBottom: 24,
   },
   historyRow: {
@@ -326,21 +350,48 @@ const styles = StyleSheet.create({
   historyTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#e2e8f0',
+    color: '#f8fafc',
     marginBottom: 4,
   },
   historyDesc: {
     fontSize: 11,
-    color: '#64748b',
+    color: '#78716c', // Soft warm stone gray
   },
   historyArrow: {
-    color: '#94a3b8',
+    color: '#fbbf24',
     fontSize: 16,
   },
   footer: {
     textAlign: 'center',
-    color: '#334155',
+    color: '#44403c',
     fontSize: 11,
     marginVertical: 10,
+  },
+  goldPromoCard: {
+    backgroundColor: 'rgba(251, 191, 36, 0.06)',
+    borderColor: 'rgba(251, 191, 36, 0.25)',
+    borderWidth: 1,
+  },
+  promoTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#fbbf24',
+    marginBottom: 4,
+  },
+  promoDesc: {
+    fontSize: 11.5,
+    color: '#a8a29e',
+    lineHeight: 16,
+  },
+  promoGoBadge: {
+    backgroundColor: '#fbbf24',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  promoGoText: {
+    color: '#1c1917',
+    fontSize: 11.5,
+    fontWeight: '800',
   }
 });

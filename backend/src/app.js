@@ -2,7 +2,12 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const { connectDB } = require('./config/db');
+const { sequelize, connectDB } = require('./config/db');
+
+// Import Models to ensure they are registered with Sequelize before sync
+const User = require('./models/User');
+const Favorite = require('./models/Favorite');
+const History = require('./models/History');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -12,8 +17,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Test Database Connection
-connectDB();
+// Connect to Database & Sync Tables
+const initDatabase = async () => {
+  await connectDB();
+  try {
+    await sequelize.sync({ alter: true });
+    console.log('🔄 MySQL Database tables synchronized successfully.');
+  } catch (error) {
+    console.error('❌ Failed to sync MySQL database tables:', error.message);
+  }
+};
+initDatabase();
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -24,8 +38,13 @@ app.get('/', (req, res) => {
   });
 });
 
-// Restaurant API Route
+// Register API Routes
+const { router: authRouter } = require('./routes/auth');
+const userRouter = require('./routes/user');
 const restaurantRouter = require('./routes/restaurant');
+
+app.use('/api/auth', authRouter);
+app.use('/api/user', userRouter);
 app.use('/api/restaurants', restaurantRouter);
 
 // Start Server
