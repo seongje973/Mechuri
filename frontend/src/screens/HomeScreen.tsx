@@ -59,10 +59,13 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
 
   // 랭킹 정보 조회. 실제 기록만 보여 주고, 못 불러오면 지어낸 숫자 대신 그 사실을 알린다
   const fetchRanking = async () => {
+    // 응답 본문을 다 읽을 때까지 8초로 묶는다. 그래야 로딩이 끝나고 새로고침 버튼이 다시 켜진다
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       setLoadingRanking(true);
       setRankingFailed(false);
-      const response = await apiFetch(`/api/restaurants/ranking`, { timeoutMs: 8000 });
+      const response = await apiFetch(`/api/restaurants/ranking`, { signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setRankingList(data.ranking || []);
@@ -71,6 +74,7 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
       setRankingList([]);
       setRankingFailed(true);
     } finally {
+      clearTimeout(timeoutId);
       setLoadingRanking(false);
     }
   };
