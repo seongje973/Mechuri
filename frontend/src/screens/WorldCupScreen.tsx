@@ -402,7 +402,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
               </View>
             ) : restaurantsError ? (
               <View style={styles.emptyWrapper}>
-                <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</Text>
+                <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</Text>
                 <TouchableOpacity style={styles.reloadBtn} onPress={() => loadRestaurants(winnerMenu.name)}>
                   <Text style={styles.reloadBtnText}>다시 시도</Text>
                 </TouchableOpacity>
