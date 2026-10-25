@@ -214,13 +214,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
   // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21). 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<Record<string, number>> => {
-    try {
-      const [histories, favorites] = await Promise.all([getHistories(), getFavorites()]);
-      return personalAdjustments({ histories, favorites });
-    } catch (e) {
-      console.log("Failed to load records for recommendation adjustments", e);
-      return {};
-    }
+    // 하나가 실패해도 나머지 기록으로 보정한다
+    const [histories, favorites] = await Promise.allSettled([getHistories(), getFavorites()]);
+    if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
+    if (favorites.status === 'rejected') console.log("Failed to load favorites for adjustments", favorites.reason);
+    return personalAdjustments({
+      histories: histories.status === 'fulfilled' ? histories.value : [],
+      favorites: favorites.status === 'fulfilled' ? favorites.value : [],
+    });
   };
 
   const showResults = (ranked: RecommendResult[]) => {
@@ -358,13 +359,15 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 하트: 게스트도 기기에 저장한다. 로그인 안내는 저장소가 정한 때(3개째)만 뜬다 (US-17)
   const handleToggleFavorite = async () => {
     if (!selectedMenu) return;
+    const menuName = selectedMenu.name;
     try {
       const { favorited } = await toggleFavorite({
-        menuName: selectedMenu.name,
+        menuName,
         emoji: selectedMenu.emoji,
         category: selectedMenu.category
       });
-      setFavorited(favorited);
+      // 저장하는 사이 다른 메뉴를 골랐으면 그 메뉴 하트를 덮어쓰지 않는다
+      if (selectedNameRef.current === menuName) setFavorited(favorited);
     } catch (e) {
       Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
     }
