@@ -264,6 +264,21 @@ describe('RecommendScreen', () => {
     isFavorite.mockImplementation(async () => false);
   });
 
+  it('하트를 두 번 눌러 두 번째 저장만 실패하면 실제 저장 상태로 하트를 맞춘다', async () => {
+    const { toggleFavorite, isFavorite } = jest.requireMock('../../storage/userData');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await reachReveal();
+    toggleFavorite.mockResolvedValueOnce({ favorited: true, count: 1 }).mockRejectedValueOnce(new Error('offline'));
+    isFavorite.mockResolvedValueOnce(true);
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    expect(screen.getByText('❤️')).toBeTruthy();
+    expect(alert).toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
   it('하트를 빠르게 연달아 눌러도 저장은 하나씩 차례로 한다', async () => {
     const { toggleFavorite } = jest.requireMock('../../storage/userData');
     await reachReveal();

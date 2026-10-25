@@ -415,6 +415,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) setFavorited(favorited);
       if (favorited) trackAccept('favorite', menuName, analyticsSession);
     } catch (e) {
+      // 앞선 저장은 됐는데 이번 저장만 실패했을 수 있으니, 실제 저장 상태를 다시 읽어 하트를 맞춘다
+      if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) {
+        isFavorite(menuName)
+          .then(f => { if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) setFavorited(f); })
+          .catch(() => {});
+      }
       Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
     }
   };
