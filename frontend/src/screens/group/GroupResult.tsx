@@ -67,7 +67,8 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
     );
   }
 
-  const voting = group.needsVote && !voteError && (!vote || !vote.winner);
+  // 내 요청이 실패했어도 다른 폰이 연 투표가 오면 투표 화면을 보여준다
+  const voting = group.needsVote && (vote ? !vote.winner : !voteError);
   if (voting) {
     const voted = me != null && !!vote?.votedIds.includes(me);
     return (

@@ -37,12 +37,12 @@ export default function GroupScreen({ navigation, route, userProfile }: Props) {
       .finally(() => setLoaded(true));
   }, []);
 
-  // 다른 방 초대 링크를 열면 지금 방 대신 그 방 참가 화면을 보여준다
+  // 다른 방 초대 링크를 열면 지금 방 대신 그 방 참가 화면을 보여준다.
+  // 저장된 참가 정보는 새 방에 실제로 들어갈 때(createRoom/joinRoom) 바뀌므로 여기서는 지우지 않는다
   useEffect(() => {
     if (!inviteCode || !loaded) return;
     if (membership && membership.code !== inviteCode) {
       setMembership(null);
-      clearMembership().catch(() => {});
     }
   }, [inviteCode, invitedAt, loaded]);
 
