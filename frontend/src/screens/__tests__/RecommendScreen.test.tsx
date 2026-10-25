@@ -207,6 +207,42 @@ describe('RecommendScreen', () => {
     expect(track.mock.calls.every((c: any[]) => c[0] === 'session-test-0001')).toBe(true);
   });
 
+  it('이전 질문을 누르면 직전 질문으로 돌아간다', async () => {
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn={false} userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    expect(screen.queryByText('← 이전 질문')).toBeNull();
+    const firstQuestion = screen.getByText('질문 1 / 7');
+    expect(firstQuestion).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤷 상관없음'));
+    });
+    expect(screen.getByText('질문 2 / 7')).toBeTruthy();
+    fireEvent.press(screen.getByText('← 이전 질문'));
+    expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    expect(screen.queryByText('← 이전 질문')).toBeNull();
+  });
+
+  it('결과 화면에서 마지막 답을 고치면 그 질문으로 돌아간다', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    const answerEvents = () => track.mock.calls.filter((c: any[]) => c[1]?.type === 'question_answer');
+    track.mockClear();
+    await reachReveal();
+    const before = answerEvents();
+    const lastIndex = before[before.length - 1][1].payload.index;
+    fireEvent.press(screen.getByText('← 마지막 답 고치기'));
+    expect(screen.queryByText(/메뉴는…/)).toBeNull();
+    expect(screen.getByText(/^질문 \d+ \/ 7$/)).toBeTruthy();
+    expect(screen.getByText('👍 예')).toBeTruthy();
+    // 고친 답은 같은 자리(index)의 답으로 다시 기록된다
+    await act(async () => {
+      fireEvent.press(screen.getByText('👎 아니오'));
+    });
+    const after = answerEvents();
+    expect(after[after.length - 1][1].payload.index).toBe(lastIndex);
+  });
+
   it('저장이 끝나기 전에 새 추천을 시작해도 먹을래요는 누른 판의 세션으로 기록한다', async () => {
     const { track, newSessionId } = jest.requireMock('../../analytics/events');
     const { addHistory } = jest.requireMock('../../storage/userData');
@@ -289,6 +325,26 @@ describe('RecommendScreen', () => {
     });
     const reject = track.mock.calls.find((c: any[]) => c[1].type === 'reject');
     expect(reject[1].payload.retries).toBe(1);
+  });
+
+  it('먹을래요 저장 중에 마지막 답을 고치면 새 결과에 맛있게 드세요가 뜨지 않는다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finishSave!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishSave = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('← 마지막 답 고치기'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('👍 예'));
+    });
+    await act(async () => {
+      finishSave();
+    });
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
   });
 
   it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
@@ -649,3 +705,4 @@ describe('RecommendScreen', () => {
     });
   });
 });
+
