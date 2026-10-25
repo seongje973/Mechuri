@@ -225,11 +225,22 @@ describe('RecommendScreen', () => {
   });
 
   it('결과 화면에서 마지막 답을 고치면 그 질문으로 돌아간다', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    const answerEvents = () => track.mock.calls.filter((c: any[]) => c[1]?.type === 'question_answer');
+    track.mockClear();
     await reachReveal();
+    const before = answerEvents();
+    const lastIndex = before[before.length - 1][1].payload.index;
     fireEvent.press(screen.getByText('← 마지막 답 고치기'));
     expect(screen.queryByText(/메뉴는…/)).toBeNull();
     expect(screen.getByText(/^질문 \d+ \/ 7$/)).toBeTruthy();
     expect(screen.getByText('👍 예')).toBeTruthy();
+    // 고친 답은 같은 자리(index)의 답으로 다시 기록된다
+    await act(async () => {
+      fireEvent.press(screen.getByText('👎 아니오'));
+    });
+    const after = answerEvents();
+    expect(after[after.length - 1][1].payload.index).toBe(lastIndex);
   });
 
   it('저장이 끝나기 전에 새 추천을 시작해도 먹을래요는 누른 판의 세션으로 기록한다', async () => {
