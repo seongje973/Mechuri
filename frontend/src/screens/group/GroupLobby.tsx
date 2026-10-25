@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { RoomState } from '../../api/roomSocket';
 import { inviteMessage } from '../../api/rooms';
-import { G, gs } from './groupTheme';
+import { colors, fonts } from '../../theme';
+import { gs } from './groupTheme';
 
 interface Props {
   state: RoomState;
@@ -54,7 +55,7 @@ export default function GroupLobby({ state, me, onReady, onStart, onLeave }: Pro
             <View key={p.id} style={styles.person}>
               <Text style={styles.avatar}>🐦</Text>
               <Text style={styles.name}>{p.nickname}{p.id === me ? ' (나)' : ''}</Text>
-              <Text style={[styles.status, (p.ready || p.id === state.hostId) && p.connected && { color: G.leaf }, !p.connected && { color: G.chili }]}>
+              <Text style={[styles.status, (p.ready || p.id === state.hostId) && p.connected && { color: colors.leaf }, !p.connected && { color: colors.chili }]}>
                 {status}
               </Text>
             </View>
@@ -83,11 +84,11 @@ export default function GroupLobby({ state, me, onReady, onStart, onLeave }: Pro
 }
 
 const styles = StyleSheet.create({
-  code: { fontSize: 44, fontWeight: '900', letterSpacing: 10, color: G.ink, marginVertical: 4 },
-  person: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: G.cream },
-  avatar: { fontSize: 22, marginRight: 10 },
-  name: { flex: 1, fontSize: 16, color: G.ink, fontWeight: '600' },
-  status: { fontSize: 13, color: G.muted, fontWeight: '700' },
+  code: { fontSize: 44, fontFamily: fonts.display, letterSpacing: 10, color: colors.ink, marginVertical: 4 },
+  person: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.cream },
+  avatar: { fontFamily: fonts.body, fontSize: 22, marginRight: 10 },
+  name: { flex: 1, fontSize: 16, color: colors.ink, fontFamily: fonts.medium },
+  status: { fontSize: 13, color: colors.muted, fontFamily: fonts.bold },
   leave: { alignItems: 'center', marginTop: 18, padding: 8 },
-  leaveText: { color: G.muted, fontSize: 14, textDecorationLine: 'underline' },
+  leaveText: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, textDecorationLine: 'underline' },
 });

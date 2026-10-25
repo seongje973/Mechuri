@@ -4,7 +4,8 @@ import { MENU_DATA, MenuItem } from '../../constants/menuData';
 import { GroupMember, GroupResult as GroupScore, groupReasons, scoreGroup } from '../../engine/groupScore';
 import { RoomState } from '../../api/roomSocket';
 import MiniWorldCup from '../../components/MiniWorldCup';
-import { G, gs } from './groupTheme';
+import { colors, fonts } from '../../theme';
+import { gs } from './groupTheme';
 
 interface Props {
   state: RoomState;
@@ -177,10 +178,10 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
 }
 
 const styles = StyleSheet.create({
-  lead: { fontSize: 18, fontWeight: '800', color: G.feather, textAlign: 'center', marginTop: 8 },
+  lead: { fontSize: 18, fontFamily: fonts.bold, color: colors.feather, textAlign: 'center', marginTop: 8 },
   winnerCard: { alignItems: 'center', paddingVertical: 28 },
   winnerEmoji: { fontSize: 64 },
-  winnerName: { fontSize: 30, fontWeight: '900', color: G.ink, marginTop: 8 },
-  waitTitle: { fontSize: 17, fontWeight: '800', color: G.ink },
-  other: { fontSize: 15, color: G.ink, paddingVertical: 4 },
+  winnerName: { fontSize: 30, fontFamily: fonts.display, color: colors.ink, marginTop: 8 },
+  waitTitle: { fontSize: 17, fontFamily: fonts.bold, color: colors.ink },
+  other: { fontFamily: fonts.body, fontSize: 15, color: colors.ink, paddingVertical: 4 },
 });
