@@ -8,6 +8,7 @@ const { sequelize, connectDB } = require('./config/db');
 const User = require('./models/User');
 const Favorite = require('./models/Favorite');
 const History = require('./models/History');
+const Event = require('./models/Event');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,6 +50,7 @@ const restaurantRouter = require('./routes/restaurant');
 app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
 app.use('/api/restaurants', restaurantRouter);
+app.use('/api/events', require('./routes/events').createEventsRouter({ Event }));
 
 // Start Server
 app.listen(PORT, () => {
