@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import RecommendScreen from '../RecommendScreen';
 
 jest.mock('expo-location', () => ({
@@ -134,6 +135,27 @@ describe('RecommendScreen', () => {
     // 게스트도 기록이 저장된다 (저장소가 기기/서버를 고른다)
     const { addHistory } = jest.requireMock('../../storage/userData');
     expect(addHistory).toHaveBeenCalledWith(expect.objectContaining({ menuName: shownTop() }));
+  });
+
+  it('기록 저장이 실패하면 먹을래요가 다시 눌리는 상태로 남는다', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    addHistory.mockRejectedValueOnce(new Error('POST /api/user/histories failed (500)'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+    expect(alert).toHaveBeenCalled();
+    alert.mockRestore();
   });
 });
 
