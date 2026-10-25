@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { createLoginCode, redeemLoginCode, buildAppReturnUrl } = require('../auth/loginHandoff');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
@@ -143,7 +144,6 @@ const axios = require('axios');
 
 router.get('/kakao/callback', async (req, res) => {
   const { code, state } = req.query;
-  const hostUri = state ? decodeURIComponent(state) : '127.0.0.1:8081';
 
   if (!code) {
     return res.status(400).send('Authorization code is missing.');
@@ -200,29 +200,25 @@ router.get('/kakao/callback', async (req, res) => {
     // 4. Generate MeChuri JWT Token
     const jwtToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
 
-    // 5. Redirect HTML script to Deep Link back to React Native App
+    // 5. 토큰은 URL에 싣지 않고, 1회용 코드만 딥링크로 앱에 넘긴다 (앱이 /kakao/exchange로 토큰을 받음)
     const userData = {
       id: user.id,
       email: user.email,
       nickname: user.nickname,
       avoidTags: user.avoidTags
     };
+    const loginCode = createLoginCode({ token: jwtToken, user: userData });
+    const appUrl = buildAppReturnUrl(loginCode, typeof state === 'string' ? state : undefined);
+    // 스크립트 안에 넣는 값은 JSON으로 만들고 '<'를 이스케이프해서 </script> 주입을 막는다
+    const appUrlJs = JSON.stringify(appUrl).replace(/</g, '\\u003c');
 
     const redirectScript = `
       <html>
         <head>
+          <meta name="referrer" content="no-referrer">
           <title>Kakao Authentication Successful</title>
           <script>
-            const token = "${jwtToken}";
-            const user = ${JSON.stringify(userData)};
-            const deepLink = "exp://${hostUri}/--/auth?token=" + token + "&user=" + encodeURIComponent(JSON.stringify(user));
-            
-            console.log("Redirecting to: " + deepLink);
-            window.location.href = deepLink;
-            
-            setTimeout(() => {
-              window.location.href = "mechuri://auth?token=" + token + "&user=" + encodeURIComponent(JSON.stringify(user));
-            }, 1000);
+            window.location.replace(${appUrlJs});
           </script>
         </head>
         <body style="background-color: #1c1917; color: #fbbf24; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; text-align: center; padding: 20px;">
@@ -234,12 +230,24 @@ router.get('/kakao/callback', async (req, res) => {
         </body>
       </html>
     `;
+    res.set('Cache-Control', 'no-store');
     return res.send(redirectScript);
 
   } catch (error) {
     console.error('❌ Kakao OAuth Error:', error.response?.data || error.message);
     return res.status(500).send(`Kakao Login Failed: ${error.message}`);
   }
+});
+
+// --- Kakao login code exchange ---
+// 카카오 콜백이 딥링크로 넘긴 1회용 코드를 토큰으로 바꾼다. 코드는 60초 안에 한 번만 쓸 수 있다.
+router.post('/kakao/exchange', (req, res) => {
+  const result = redeemLoginCode(req.body?.code);
+  if (!result) {
+    return res.status(400).json({ error: 'Invalid or expired login code.' });
+  }
+  res.set('Cache-Control', 'no-store');
+  return res.json(result);
 });
 
 // --- Kakao Mobile REST API Sync ---

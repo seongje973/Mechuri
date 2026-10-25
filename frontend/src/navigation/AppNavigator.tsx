@@ -77,13 +77,19 @@ export default function AppNavigator() {
               }
             }
             
-            const token = params['token'];
-            const userJson = params['user'];
-            
-            if (token && userJson) {
-              const user = JSON.parse(userJson);
+            // 서버는 토큰 대신 60초짜리 1회용 코드를 넘긴다. 토큰은 코드로 POST해서 받는다.
+            const loginCode = params['code'];
+            if (loginCode) {
+              const res = await apiFetch('/api/auth/kakao/exchange', {
+                method: 'POST',
+                body: { code: loginCode },
+                auth: false,
+                timeoutMs: 8000
+              });
+              if (!res.ok) throw new Error(`Login code exchange failed (${res.status})`);
+              const { token, user } = await res.json();
               await saveSession(token, user);
-              
+
               console.log("✅ Deep Link Auth Successful! Nickname:", user.nickname);
               setUserProfile(user);
               setIsLoggedIn(true);
