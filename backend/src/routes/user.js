@@ -4,6 +4,8 @@ const { authMiddleware } = require('./auth');
 const User = require('../models/User');
 const Favorite = require('../models/Favorite');
 const History = require('../models/History');
+const { sequelize } = require('../config/db');
+const { ImportError, normalizeImportPayload, planImport } = require('../user/guestImport');
 
 // Apply authMiddleware to all routes here
 router.use(authMiddleware);
@@ -170,6 +172,55 @@ router.put('/avoid-tags', async (req, res) => {
   } catch (error) {
     console.error('❌ Avoid Tags Update Error:', error.message);
     return res.status(500).json({ error: 'Failed to update avoid tags.' });
+  }
+});
+
+// 10. POST Import guest data (로그인 직후 기기에 있던 게스트 기록을 계정으로 옮긴다)
+router.post('/import', async (req, res) => {
+  let payload;
+  try {
+    payload = normalizeImportPayload(req.body);
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof ImportError ? error.message : 'Invalid import payload.' });
+  }
+
+  try {
+    const userId = req.user.id;
+    const result = await sequelize.transaction(async transaction => {
+      const user = await User.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!user) return null;
+
+      const menuNames = [...new Set([...payload.histories, ...payload.favorites].map(item => item.menuName))];
+      const [existingHistories, existingFavorites] = await Promise.all([
+        History.findAll({ where: { userId, menuName: menuNames }, attributes: ['menuName', 'createdAt'], transaction }),
+        Favorite.findAll({ where: { userId }, attributes: ['menuName'], transaction })
+      ]);
+
+      const plan = planImport(payload, {
+        histories: existingHistories,
+        favorites: existingFavorites,
+        avoidTags: user.avoidTags
+      });
+
+      // createdAt은 게스트가 실제로 먹은 시각을 그대로 둔다
+      await History.bulkCreate(plan.histories.map(h => ({ ...h, userId })), { transaction, silent: true });
+      await Favorite.bulkCreate(plan.favorites.map(f => ({ ...f, userId })), { transaction, silent: true });
+      user.avoidTags = plan.avoidTags;
+      await user.save({ transaction });
+
+      return { histories: plan.histories.length, favorites: plan.favorites.length, avoidTags: user.avoidTags };
+    });
+
+    if (!result) return res.status(404).json({ error: 'User not found.' });
+
+    return res.json({
+      message: 'Guest data imported successfully! 🐣',
+      imported: { histories: result.histories, favorites: result.favorites },
+      avoidTags: result.avoidTags
+    });
+  } catch (error) {
+    console.error('❌ Guest Import Error:', error.message);
+    return res.status(500).json({ error: 'Failed to import guest data.' });
   }
 });
 
