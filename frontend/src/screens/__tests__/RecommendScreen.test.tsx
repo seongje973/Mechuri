@@ -154,4 +154,22 @@ describe('RecommendScreen', () => {
     expect(track).toHaveBeenLastCalledWith('session-test-0001', { type: 'accept', payload: { action: 'delivery', menu: top } });
     expect(track.mock.calls.every((c: any[]) => c[0] === 'session-test-0001')).toBe(true);
   });
+
+  it('이전 질문을 누르면 직전 질문으로 돌아간다', async () => {
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn={false} userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    expect(screen.queryByText('← 이전 질문')).toBeNull();
+    const firstQuestion = screen.getByText('질문 1 / 7');
+    expect(firstQuestion).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤷 상관없음'));
+    });
+    expect(screen.getByText('질문 2 / 7')).toBeTruthy();
+    fireEvent.press(screen.getByText('← 이전 질문'));
+    expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    expect(screen.queryByText('← 이전 질문')).toBeNull();
+  });
 });
+

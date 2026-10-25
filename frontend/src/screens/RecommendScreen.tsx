@@ -19,6 +19,7 @@ import { addHistory, getAvoidTags, getFavorites, getHistories, isFavorite, toggl
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { openDelivery } from '../utils/openDelivery';
+import { shareResult } from '../utils/shareResult';
 import { AcceptAction, newSessionId, track } from '../analytics/events';
 
 const { width } = Dimensions.get('window');
@@ -85,6 +86,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 점수 방식 엔진 상태 (src/engine/recommendFlow.ts)
   const [session, setSession] = useState<RecommendSession | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  // "이전 질문" 되돌리기용: 답하기 직전 상태들 (이번 판, 이번 "틀렸어요" 구간만)
+  const [history, setHistory] = useState<{ session: RecommendSession; question: Question }[]>([]);
 
   // 결과: [0]이 지금 보여주는 메뉴, 나머지가 대안
   const [results, setResults] = useState<RecommendResult[]>([]);
@@ -146,6 +149,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setExcludedCategories([]);
     setSession(null);
     setCurrentQuestion(null);
+    setHistory([]);
     setResults([]);
     setSelectedMenu(null);
     setAdjustments({});
@@ -204,6 +208,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
+    setHistory([]);
     setSession(first);
     setGameState('questioning');
     goNext(first);
@@ -226,8 +231,18 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       payload: { questionId: currentQuestion.id, answer, index: session.answers.length }
     });
     const next = answerQuestion(session, currentQuestion, answer);
+    setHistory([...history, { session, question: currentQuestion }]);
     setSession(next);
     goNext(next);
+  };
+
+  // 잘못 누른 답을 되돌린다
+  const handleUndo = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory(history.slice(0, -1));
+    setSession(prev.session);
+    setCurrentQuestion(prev.question);
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
@@ -300,6 +315,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (!session || !top || !canReject(session)) return;
     track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: session.rejected.length } });
     const next = rejectTopResult(session, top.item.name);
+    setHistory([]);
     setSession(next);
     setSelectedMenu(null);
     setRestaurantsList([]);
@@ -514,6 +530,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
             ))}
           </View>
 
+          {history.length > 0 && (
+            <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
+              <Text style={styles.undoButtonText}>← 이전 질문</Text>
+            </TouchableOpacity>
+          )}
+
           {/* 귀찮으면 지금 점수로 바로 결과 (3번째 질문부터) */}
           {questionNumber >= SHOW_SKIP_FROM_QUESTION && session && (
             <TouchableOpacity style={styles.skipButton} onPress={() => finishAkinator(session)}>
@@ -583,6 +605,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              <TouchableOpacity style={styles.shareButton} onPress={() => shareResult(results[0].item, results[0].reasons)}>
+                <Text style={styles.shareButtonText}>📤 친구에게 공유하기</Text>
+              </TouchableOpacity>
 
               {session && canReject(session) && (
                 <TouchableOpacity style={styles.rejectButton} onPress={handleReject}>
@@ -730,6 +756,27 @@ const styles = StyleSheet.create({
   },
   actionPrimaryLabel: {
     color: '#ffffff',
+  },
+  undoButton: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  undoButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9a8a74',
+  },
+  shareButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  shareButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F5A623',
   },
   rejectButton: {
     marginTop: 14,
