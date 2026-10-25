@@ -40,3 +40,14 @@ export const RETRY_WORLDCUP_SIZE = 4;
 
 /** 즐겨찾기한 메뉴 보너스 (US-21) */
 export const FAVORITE_BONUS = 1;
+
+/** 날씨·시간대 상황 보정 (L-02). 메뉴 하나에 상황 보정은 이 값까지만 */
+export const CONTEXT_BONUS = 1;
+/** 결과를 낼 때 아직 안 온 날씨를 기다리는 최대 시간 */
+export const WEATHER_WAIT_MS = 1500;
+/** 이 기온(°C) 이상이면 차가운 음식, 이하이면 따뜻한 국물 */
+export const HOT_DAY_TEMP = 27;
+export const COLD_DAY_TEMP = 5;
+/** 늦은 밤: 22시 ~ 다음 날 4시 */
+export const LATE_NIGHT_START_HOUR = 22;
+export const LATE_NIGHT_END_HOUR = 4;

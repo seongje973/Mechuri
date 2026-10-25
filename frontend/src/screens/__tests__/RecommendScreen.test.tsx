@@ -428,4 +428,224 @@ describe('RecommendScreen', () => {
     });
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
+
+  describe('날씨 보정 (L-02)', () => {
+    const Location = jest.requireMock('expo-location');
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const weatherCalls = () => apiFetch.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/weather'));
+
+    beforeEach(() => apiFetch.mockClear());
+    afterEach(() => {
+      Location.requestForegroundPermissionsAsync.mockImplementation(async () => ({ status: 'denied' }));
+      apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+    });
+
+    it('추천을 시작한 뒤에 GPS가 잡혀도 날씨를 받는다', async () => {
+      let grant!: (v: unknown) => void;
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(() => new Promise(r => (grant = r)));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      renderScreen();
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      expect(weatherCalls()).toHaveLength(0);
+      await act(async () => {
+        grant({ status: 'granted' });
+      });
+      expect(weatherCalls()).toHaveLength(1);
+    });
+
+    it('기피 태그를 읽는 사이 GPS가 잡혀도 그 좌표로 날씨를 받는다', async () => {
+      const { getAvoidTags } = jest.requireMock('../../storage/userData');
+      let grant!: (v: unknown) => void;
+      let tags!: (v: string[]) => void;
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(() => new Promise(r => (grant = r)));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (tags = r)));
+      renderScreen();
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      await act(async () => {
+        grant({ status: 'granted' });
+      });
+      await act(async () => {
+        tags([]);
+      });
+      expect(weatherCalls()).toHaveLength(1);
+    });
+
+    it('기피 태그를 읽는 사이 다시 시작하면 늦게 끝난 이전 시작은 버린다', async () => {
+      const { getAvoidTags } = jest.requireMock('../../storage/userData');
+      const { track } = jest.requireMock('../../analytics/events');
+      let slowTags!: (v: string[]) => void;
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (slowTags = r)));
+      renderScreen();
+      track.mockClear();
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      await act(async () => {
+        slowTags([]);
+      });
+      expect(track.mock.calls.filter((c: any[]) => c[1].type === 'rec_start')).toHaveLength(1);
+    });
+
+    it('새 추천이 기피 태그를 읽는 사이 이전 결과 계산이 끝나도 이전 판 결과를 띄우지 않는다', async () => {
+      const { getHistories, getAvoidTags } = jest.requireMock('../../storage/userData');
+      const { track } = jest.requireMock('../../analytics/events');
+      let histories!: (v: unknown[]) => void;
+      let tags!: (v: string[]) => void;
+      getHistories.mockImplementationOnce(() => new Promise(r => (histories = r)));
+      const navigation = { navigate: jest.fn() };
+      const view = render(<RecommendScreen navigation={navigation} isLoggedIn={false} userProfile={null} />);
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 3; i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('🤷 상관없음'));
+        });
+      }
+      await act(async () => {
+        fireEvent.press(screen.getByText('바로 결과 보기 ➔'));
+      });
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (tags = r)));
+      await act(async () => {
+        view.rerender(
+          <RecommendScreen navigation={navigation} route={{ params: { autoStart: 1 } }} isLoggedIn={false} userProfile={null} />
+        );
+      });
+      track.mockClear();
+      await act(async () => {
+        histories([]);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 0));
+      });
+      expect(screen.queryByText('당신이 생각한 메뉴는…')).toBeNull();
+      expect(track.mock.calls.some((c: any[]) => c[1].type === 'result_shown')).toBe(false);
+      await act(async () => {
+        tags([]);
+      });
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    });
+
+    it('새 추천이 기피 태그를 읽는 사이 이전 판에서 결과를 요청해도 이전 판 결과를 띄우지 않는다', async () => {
+      const { getAvoidTags } = jest.requireMock('../../storage/userData');
+      const { track } = jest.requireMock('../../analytics/events');
+      let tags!: (v: string[]) => void;
+      const navigation = { navigate: jest.fn() };
+      const view = render(<RecommendScreen navigation={navigation} isLoggedIn={false} userProfile={null} />);
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 3; i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('🤷 상관없음'));
+        });
+      }
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (tags = r)));
+      await act(async () => {
+        view.rerender(
+          <RecommendScreen navigation={navigation} route={{ params: { autoStart: 1 } }} isLoggedIn={false} userProfile={null} />
+        );
+      });
+      track.mockClear();
+      await act(async () => {
+        fireEvent.press(screen.getByText('바로 결과 보기 ➔'));
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 0));
+      });
+      expect(screen.queryByText('당신이 생각한 메뉴는…')).toBeNull();
+      expect(track.mock.calls.some((c: any[]) => c[1].type === 'result_shown')).toBe(false);
+      await act(async () => {
+        tags([]);
+      });
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    });
+
+    it('결과를 계산하는 사이 새 추천을 시작하면 이전 판 결과를 띄우지 않는다', async () => {
+      const { getHistories } = jest.requireMock('../../storage/userData');
+      let histories!: (v: unknown[]) => void;
+      getHistories.mockImplementationOnce(() => new Promise(r => (histories = r)));
+      const navigation = { navigate: jest.fn() };
+      const view = render(<RecommendScreen navigation={navigation} isLoggedIn={false} userProfile={null} />);
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 3; i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('🤷 상관없음'));
+        });
+      }
+      await act(async () => {
+        fireEvent.press(screen.getByText('바로 결과 보기 ➔'));
+      });
+      // 홈의 "바로 추천"으로 새 판을 시작한다
+      await act(async () => {
+        view.rerender(
+          <RecommendScreen navigation={navigation} route={{ params: { autoStart: 1 } }} isLoggedIn={false} userProfile={null} />
+        );
+      });
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+      await act(async () => {
+        histories([]);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 0));
+      });
+      expect(screen.queryByText('당신이 생각한 메뉴는…')).toBeNull();
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    });
+
+    it('비가 오면 국물 메뉴 결과에 날씨 이유 칩을 붙인다', async () => {
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(async () => ({ status: 'granted' }));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      apiFetch.mockImplementation(async (path: string) =>
+        String(path).startsWith('/api/weather')
+          ? { ok: true, json: async () => ({ condition: 'rain', temperature: 15 }) }
+          : { ok: true, json: async () => ({ restaurants: [], histories: [] }) }
+      );
+      renderScreen();
+      await act(async () => {});
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+      }
+      expect(await screen.findByText('당신이 생각한 메뉴는…')).toBeTruthy();
+      expect(screen.getByText('비 오는 날엔 국물')).toBeTruthy();
+    });
+
+    it('날씨 응답이 늦어도 잠깐만 기다리고 결과를 보여 준다', async () => {
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(async () => ({ status: 'granted' }));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      apiFetch.mockImplementation((path: string) =>
+        String(path).startsWith('/api/weather')
+          ? new Promise(() => {})
+          : Promise.resolve({ ok: true, json: async () => ({ restaurants: [], histories: [] }) })
+      );
+      renderScreen();
+      await act(async () => {});
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      expect(weatherCalls()).toHaveLength(1);
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+        if (!screen.queryByText('👍 예')) break;
+      }
+      expect(await screen.findByText('당신이 생각한 메뉴는…', {}, { timeout: 3000 })).toBeTruthy();
+    });
+  });
 });

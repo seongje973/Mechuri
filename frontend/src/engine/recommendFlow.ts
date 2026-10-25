@@ -174,12 +174,14 @@ export interface RecommendResult extends RankedMenu {
  * 1위 + 대안 2개와 추천 이유.
  * adjustments: 메뉴 이름 → 점수 보정 (최근 먹은 메뉴 감점 등, S4에서 즐겨찾기까지 확장)
  * size: 몇 개까지 (기본 1위 + 대안 2개, 월드컵 제안은 4개)
+ * extraReasons: 메뉴 이름 → 덧붙일 이유 (날씨·시간대 보정 등)
  */
 export const getResults = (
   session: RecommendSession,
   questions: Question[],
   adjustments: Record<string, number> = {},
-  size: number = RESULT_SIZE
+  size: number = RESULT_SIZE,
+  extraReasons: Record<string, string> = {}
 ): RecommendResult[] => {
   const byId = new Map(questions.map(q => [q.id, q]));
   return rankAdjusted(session, adjustments)
@@ -193,7 +195,11 @@ export const getResults = (
           return q ? (c.matched ? q.reason.yes : q.reason.no) : null;
         })
         .filter((text): text is string => !!text);
-      const unique = Array.from(new Set([...tasteReasons, ...session.situationReasons])).slice(0, MAX_REASON_CHIPS);
+      const extra = extraReasons[r.item.name];
+      const base = Array.from(new Set([...tasteReasons, ...session.situationReasons]));
+      // 날씨·시간대 보정은 점수에 들어갔으니 칩이 꽉 차도 한 자리는 남겨 둔다
+      const unique =
+        extra && !base.includes(extra) ? [...base.slice(0, MAX_REASON_CHIPS - 1), extra] : base.slice(0, MAX_REASON_CHIPS);
       return { ...r, reasons: unique.length > 0 ? unique : [r.item.category] };
     });
 };

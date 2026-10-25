@@ -38,8 +38,9 @@ import {
   shouldStop,
   toRecommendSession
 } from '../engine/recommendFlow';
-import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
+import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
 import { personalAdjustments } from '../engine/personalize';
+import { RecommendContext, contextAdjustments, mergeAdjustments } from '../engine/context';
 
 
 const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
@@ -90,7 +91,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   // 결과 계산에 쓴 개인화 보정. "틀렸어요" 뒤 다시 계산할 때도 같은 값을 쓴다
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
+  const [contextReasons, setContextReasons] = useState<Record<string, string>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
+  // 추천을 시작할 때 미리 받아 두는 날씨 (L-02). 못 받으면 시간대만 쓴다
+  const weatherRef = useRef<RecommendContext['weather']>(null);
+  // 추천 한 판마다 올라가는 번호. 이전 판의 늦은 날씨 응답이 새 판을 덮지 않게 한다
+  const weatherRoundRef = useRef(0);
+  // 시작 요청마다 올라간다. 기피 태그를 읽는 사이 다시 시작했거나 초기화했으면 이전 요청은 버린다
+  const startRequestRef = useRef(0);
+  // 질문 화면에 떠 있는 판을 시작한 요청 번호. startRequestRef보다 작으면 새 시작이 진행 중이다
+  const activeStartRequestRef = useRef(0);
+  const weatherPromiseRef = useRef<Promise<void> | null>(null);
   // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const [favorited, setFavorited] = useState(false);
@@ -115,6 +126,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // GPS 위치 및 백엔드 통신용 상태값
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
+  // 추천 시작은 기피 태그를 기다린 뒤 좌표를 읽는다. 그사이 잡힌 GPS를 놓치지 않게 최신 값을 따로 둔다
+  const userCoordsRef = useRef<{ latitude: number, longitude: number } | null>(null);
+  const updateUserCoords = (coords: { latitude: number, longitude: number }) => {
+    userCoordsRef.current = coords;
+    setUserCoords(coords);
+  };
   const [restaurantsList, setRestaurantsList] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
 
@@ -126,7 +143,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           const location = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced
           });
-          setUserCoords({
+          updateUserCoords({
             latitude: location.coords.latitude,
             longitude: location.coords.longitude
           });
@@ -152,6 +169,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 아키네이터 인트로 셋업 및 초기화
   const resetGame = () => {
+    startRequestRef.current += 1;
     eatRoundRef.current += 1;
     setExcludedCategories([]);
     setSession(null);
@@ -159,6 +177,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setResults([]);
     setSelectedMenu(null);
     setAdjustments({});
+    setContextReasons({});
     setWorldCupResults([]);
     setEatenMenus([]);
     setRestaurantsList([]);
@@ -173,7 +192,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced
         });
-        setUserCoords({
+        updateUserCoords({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
         });
@@ -194,6 +213,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 아키네이터 게임 기동
   const startAkinator = async (excluded: string[] = excludedCategories, auto = false) => {
+    const startRequest = ++startRequestRef.current;
     // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags)은 시작 전에 후보에서 뺀다
     let avoidTags: string[] = [];
     try {
@@ -201,14 +221,22 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     } catch (e) {
       console.log("Failed to load user avoid tags on setup", e);
     }
+    if (startRequestRef.current !== startRequest) return;
     const first = toRecommendSession(createScoreSession(MENU_DATA, { avoidTags, excludedCategories: excluded }));
 
     if (first.candidates.length === 0) {
+      // 새 판을 못 열었으니 지금 판을 계속 진행할 수 있게 진행 중 표시를 거둔다
+      if (startRequestRef.current === startRequest) startRequestRef.current = activeStartRequestRef.current;
       Alert.alert("경고 ⚠️", "제외한 장르와 기피 재료 때문에 남은 메뉴가 없어요. 조건을 조금 풀어 주세요.");
       return;
     }
 
+    activeStartRequestRef.current = startRequest;
     eatRoundRef.current += 1;
+    weatherRoundRef.current += 1;
+    weatherRef.current = null;
+    const coords = userCoordsRef.current;
+    weatherPromiseRef.current = coords ? loadWeather(coords, weatherRoundRef.current) : null;
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
@@ -239,6 +267,34 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
+  const loadWeather = async (coords: { latitude: number, longitude: number }, round: number) => {
+    try {
+      const res = await apiFetch(`/api/weather?lat=${coords.latitude}&lng=${coords.longitude}`, { auth: false, timeoutMs: 3000 });
+      if (res.ok) {
+        const data = await res.json();
+        if (weatherRoundRef.current === round) weatherRef.current = { condition: data.condition, temperature: data.temperature };
+      }
+    } catch (e) {
+      console.log("Weather unavailable, using time of day only");
+    }
+  };
+
+  // 추천을 시작한 뒤에 GPS가 잡히면 그때 날씨를 받는다
+  useEffect(() => {
+    if (userCoords && weatherRoundRef.current > 0 && !weatherPromiseRef.current) {
+      weatherPromiseRef.current = loadWeather(userCoords, weatherRoundRef.current);
+    }
+  }, [userCoords]);
+
+  // 날씨가 아직 오는 중이면 잠깐만 기다린다. 늦으면 시간대만으로 보정한다
+  const waitForWeather = async () => {
+    const pending = weatherPromiseRef.current;
+    if (!pending) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([pending, new Promise<void>(resolve => (timer = setTimeout(resolve, WEATHER_WAIT_MS)))]);
+    clearTimeout(timer);
+  };
+
   // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21). 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<Record<string, number>> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
@@ -276,14 +332,34 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   const finishAkinator = async (finalSession: RecommendSession) => {
+    // 새 시작 요청은 기피 태그를 읽는 동안 판 번호를 아직 올리지 않았으므로 요청 번호도 본다.
+    // 새 판이 열리는 중이면 지금 판의 결과는 계산하지 않는다
+    const startRequest = activeStartRequestRef.current;
+    if (startRequestRef.current !== startRequest) return;
     setCurrentQuestion(null);
+    // 추천을 시작할 때마다 올라가는 판 번호
+    const round = weatherRoundRef.current;
+    // 화면을 떠나면 판이 끝난다 (analyticsSessionRef가 비워짐)
     const analyticsSession = analyticsSessionRef.current;
-    // "틀렸어요" 뒤에는 처음 불러온 보정값을 그대로 쓴다
-    const adj = finalSession.rejected.length > 0 ? adjustments : await loadAdjustments();
-    // 보정값을 읽는 사이 새 추천을 시작했으면 이전 판 결과를 띄우지 않는다
-    if (analyticsSessionRef.current !== analyticsSession) return;
-    setAdjustments(adj);
-    showResults(getResults(finalSession, QUESTIONS, adj), finalSession);
+    // "틀렸어요" 뒤에는 처음 계산한 보정값을 그대로 쓴다
+    let adj = adjustments;
+    let reasons = contextReasons;
+    if (finalSession.rejected.length === 0) {
+      await waitForWeather();
+      const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
+      const personal = await loadAdjustments();
+      // 날씨·보정값을 기다리는 사이 새 추천을 시작했으면 이전 판 결과를 띄우지 않는다
+      if (
+        weatherRoundRef.current !== round ||
+        analyticsSessionRef.current !== analyticsSession ||
+        startRequestRef.current !== startRequest
+      ) return;
+      adj = mergeAdjustments(personal, context.adjustments);
+      reasons = context.reasons;
+      setAdjustments(adj);
+      setContextReasons(reasons);
+    }
+    showResults(getResults(finalSession, QUESTIONS, adj, undefined, reasons), finalSession);
   };
 
   // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
@@ -298,7 +374,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setRestaurantsList([]);
 
     if (session.rejected.length >= 1) {
-      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE);
+      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE, contextReasons);
       if (cup.length >= 2) {
         setWorldCupResults(cup);
         setGameState('worldcup');

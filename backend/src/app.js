@@ -61,6 +61,7 @@ app.use('/api/user', userRouter);
 app.use('/api/restaurants', restaurantRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/events', require('./routes/events').createEventsRouter({ Event }));
+app.use('/api/weather', require('./routes/weather').createWeatherRouter());
 
 // Start Server
 const server = app.listen(PORT, () => {
