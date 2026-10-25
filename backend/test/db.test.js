@@ -1,5 +1,5 @@
 // 실제 PostgreSQL이 필요한 테스트. TEST_DATABASE_URL이 있을 때만 돈다.
-// ⚠️ 그 DB의 public 스키마를 지우고 다시 만든다. 개발 DB 말고 빈 테스트용 DB를 쓰세요.
+// ⚠️ 그 DB의 public 스키마를 지우고 다시 만든다. 개발 DB 말고 빈 테스트용 DB를 쓰세요 (이름에 test가 없으면 멈춘다).
 //   예: TEST_DATABASE_URL=postgres://postgres:mechuri_password@127.0.0.1:5432/mechuri_test npm test
 const test = require('node:test');
 const assert = require('node:assert');
@@ -32,6 +32,8 @@ test('database', { skip }, async (t) => {
     sha256Hex,
     CODE_TTL_MS
   } = require('../src/auth/loginHandoff');
+  const dbName = sequelize.getDatabaseName();
+  assert.match(dbName, /test/i, `Refusing to reset schema of non-test database "${dbName}"`);
   const resetSchema = () => sequelize.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
 
   try {
