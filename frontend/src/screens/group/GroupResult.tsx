@@ -9,7 +9,7 @@ import { G, gs } from './groupTheme';
 interface Props {
   state: RoomState;
   me: number | null;
-  onOpenVote: (candidates: string[]) => Promise<{ ok: boolean; message?: string }>;
+  onOpenVote: (candidates: string[]) => Promise<{ ok: boolean; error?: string; message?: string }>;
   onVote: (menu: string) => Promise<{ ok: boolean; message?: string }>;
   onFindRestaurants: (menuName: string) => void;
   onRestart: () => void;
@@ -28,6 +28,10 @@ export const membersFromState = (state: RoomState): GroupMember[] =>
 const toMenuItem = (name: string): MenuItem =>
   MENU_DATA.find(m => m.name === name) ?? ({ ...MENU_DATA[0], name, emoji: '🍽️', desc: '' } as MenuItem);
 
+// 응답이 늦거나 연결이 잠깐 끊겨 투표를 못 열었을 때 다시 시도하는 간격
+const VOTE_RETRY_MS = 3000;
+const RETRYABLE_VOTE_ERRORS = ['TIMEOUT', 'OFFLINE'];
+
 /**
  * 결과 화면 (US-27~29). 점수는 각 폰이 같은 답으로 똑같이 계산하고,
  * 1·2위가 비슷하면 서버가 여는 4강 투표로 정한다. 투표 우승은 서버가 정해서 모든 폰에 같다.
@@ -36,6 +40,8 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
   const group: GroupScore = useMemo(() => scoreGroup(membersFromState(state)), [state.result]);
   const vote = state.vote;
   const askedForVote = useRef(false);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [myPick, setMyPick] = useState<string | null>(null);
 
@@ -49,9 +55,19 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
     if (!group.needsVote || askedForVote.current) return;
     askedForVote.current = true;
     onOpenVote(group.voteCandidates).then(ack => {
-      if (!ack.ok) setVoteError(ack.message ?? '투표를 열지 못했어요.');
+      if (ack.ok) return;
+      if (ack.error && RETRYABLE_VOTE_ERRORS.includes(ack.error)) {
+        askedForVote.current = false;
+        retryTimer.current = setTimeout(() => setRetryTick(t => t + 1), VOTE_RETRY_MS);
+        return;
+      }
+      setVoteError(ack.message ?? '투표를 열지 못했어요.');
     });
-  }, [group.needsVote, vote]);
+  }, [group.needsVote, vote, retryTick]);
+
+  useEffect(() => () => {
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+  }, []);
 
   const bracketMenus = useMemo(() => (vote ? vote.candidates.map(toMenuItem) : []), [vote?.candidates.join('|')]);
 
@@ -104,18 +120,20 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
   }
 
   const winnerName = vote?.winner ?? group.ranked[0].item.name;
-  const winner = group.ranked.find(r => r.item.name === winnerName) ?? group.ranked[0];
-  const reasons = groupReasons(winner);
+  // 서버가 정한 우승 메뉴가 이 폰 순위에 없어도 모든 폰이 같은 메뉴를 보여주게 한다
+  const rankedWinner = group.ranked.find(r => r.item.name === winnerName);
+  const winnerItem = rankedWinner?.item ?? toMenuItem(winnerName);
+  const reasons = rankedWinner ? groupReasons(rankedWinner) : [];
   const memberCount = membersFromState(state).filter(m => !m.left).length;
-  const others = group.ranked.filter(r => r.item.name !== winner.item.name).slice(0, 3);
+  const others = group.ranked.filter(r => r.item.name !== winnerName).slice(0, 3);
 
   return (
     <View>
       <Text style={styles.lead}>우리의 메뉴는…</Text>
       <View style={[gs.card, styles.winnerCard]}>
-        <Text style={styles.winnerEmoji}>{winner.item.emoji}</Text>
-        <Text style={styles.winnerName}>{winner.item.name}</Text>
-        <Text style={gs.subtitle}>{winner.item.desc}</Text>
+        <Text style={styles.winnerEmoji}>{winnerItem.emoji}</Text>
+        <Text style={styles.winnerName}>{winnerItem.name}</Text>
+        <Text style={gs.subtitle}>{winnerItem.desc}</Text>
       </View>
 
       <View style={gs.card}>
@@ -138,8 +156,8 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
         </View>
       </View>
 
-      <TouchableOpacity style={gs.primary} onPress={() => onFindRestaurants(winner.item.name)}>
-        <Text style={gs.primaryText}>📍 근처 {winner.item.name} 식당 보기</Text>
+      <TouchableOpacity style={gs.primary} onPress={() => onFindRestaurants(winnerItem.name)}>
+        <Text style={gs.primaryText}>📍 근처 {winnerItem.name} 식당 보기</Text>
       </TouchableOpacity>
 
       {others.length > 0 ? (
