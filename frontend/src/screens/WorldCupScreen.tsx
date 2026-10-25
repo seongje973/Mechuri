@@ -398,7 +398,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
             {loadingRestaurants ? (
               <View style={styles.loadingWrapper}>
-                <ActivityIndicator size="large" color={colors.yolkDeep} />
+                <ActivityIndicator size="large" color={colors.feather} />
                 <Text style={styles.loadingText}>메추리가 실제 식당 정보를 검색하는 중...</Text>
               </View>
             ) : restaurantsError ? (
@@ -455,7 +455,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.yolkDeep} />
+        <ActivityIndicator size="large" color={colors.feather} />
       </View>
     </SafeAreaView>
   );
