@@ -25,6 +25,7 @@
     "@types/react": "~19.1.10",
     "jest": "^29.7.0",
     "jest-expo": "~54.0.18",
+    "tsx": "^4.20.6",
     "typescript": "~5.9.2"
   },
   "scripts": {
@@ -33,7 +34,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:menu": "tsx scripts/checkMenu.ts"
   },
   "private": true,
   "jest": {
