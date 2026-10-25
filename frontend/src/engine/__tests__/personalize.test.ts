@@ -9,6 +9,7 @@ describe('recentMealAdjustments', () => {
           { menuName: '짬뽕', createdAt: '2026-11-09T12:00:00Z' },
           { menuName: '짬뽕', createdAt: '2026-11-08T12:00:00Z' },
           { menuName: '초밥', createdAt: '2026-11-01T12:00:00Z' },
+          { menuName: '햄버거', createdAt: '2026-11-11T12:00:00Z' },
           { menuName: '피자', createdAt: 'not-a-date' },
         ],
         now
