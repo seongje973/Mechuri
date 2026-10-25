@@ -184,7 +184,8 @@ describe('RecommendScreen', () => {
       });
     }
     apiFetch.mockClear();
-    apiFetch.mockImplementationOnce(() => new Promise(() => {}));
+    let finishFirst!: (v: unknown) => void;
+    apiFetch.mockImplementationOnce(() => new Promise(r => (finishFirst = r)));
     await act(async () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
@@ -198,5 +199,11 @@ describe('RecommendScreen', () => {
     const saved = apiFetch.mock.calls.filter((c: any[]) => c[0] === '/api/user/histories').map((c: any[]) => c[1].body.menuName);
     expect(saved).toHaveLength(2);
     expect(saved[1]).toBe(altName);
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+    // 먼저 누른 메뉴의 저장이 늦게 끝나도 지금 메뉴의 완료 표시는 그대로다
+    await act(async () => {
+      finishFirst({ ok: true, status: 201, json: async () => ({}) });
+    });
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
 });
