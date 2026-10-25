@@ -18,6 +18,7 @@ import { AVOID_TAG_OPTIONS } from '../constants/menuData';
 import {
   UserStats,
   clearHistories,
+  deleteAccount,
   getAvoidTags,
   getFavorites,
   getHistories,
@@ -162,6 +163,27 @@ export default function MyPageScreen({
       [
         { text: "취소", style: "cancel" },
         { text: "로그아웃", style: "destructive", onPress: onLogout }
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    const confirmDelete = async () => {
+      try {
+        await deleteAccount();
+        onLogout();
+        Alert.alert("탈퇴 완료", "계정과 모든 기록을 지웠어요. 그동안 고마웠어요 🐣");
+      } catch (e) {
+        Alert.alert("에러", "탈퇴하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요.");
+      }
+    };
+
+    Alert.alert(
+      "회원 탈퇴",
+      "계정과 식사 기록, 최애 메뉴, 기피 설정이 모두 지워지고 되돌릴 수 없어요. 정말 탈퇴할까요?",
+      [
+        { text: "취소", style: "cancel" },
+        { text: "탈퇴하기", style: "destructive", onPress: confirmDelete }
       ]
     );
   };
@@ -433,6 +455,12 @@ export default function MyPageScreen({
             </TouchableOpacity>
           )}
 
+          {!isGuest && (
+            <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+              <Text style={styles.deleteAccountText}>회원 탈퇴</Text>
+            </TouchableOpacity>
+          )}
+
           <Text style={styles.versionText}>버전 정보 v1.2.0</Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -656,6 +684,16 @@ const styles = StyleSheet.create({
     color: colors.chili,
     fontSize: 14.5,
     fontWeight: '700',
+  },
+  deleteAccountBtn: {
+    marginTop: 14,
+    alignSelf: 'center',
+    padding: 6,
+  },
+  deleteAccountText: {
+    color: colors.muted,
+    fontSize: 12.5,
+    textDecorationLine: 'underline',
   },
   versionText: {
     textAlign: 'center',

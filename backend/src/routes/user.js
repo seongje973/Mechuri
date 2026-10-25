@@ -5,7 +5,9 @@ const User = require('../models/User');
 const Favorite = require('../models/Favorite');
 const History = require('../models/History');
 const { sequelize } = require('../config/db');
+const Event = require('../models/Event');
 const { ImportError, normalizeImportPayload, planImport } = require('../user/guestImport');
+const { deleteAccount } = require('../user/deleteAccount');
 
 // Apply authMiddleware to all routes here
 router.use(authMiddleware);
@@ -221,6 +223,19 @@ router.post('/import', async (req, res) => {
   } catch (error) {
     console.error('❌ Guest Import Error:', error.message);
     return res.status(500).json({ error: 'Failed to import guest data.' });
+  }
+});
+
+// 11. DELETE Account (회원 탈퇴: 계정, 식사 기록, 즐겨찾기, 기피 태그, 계정에 묶인 지표 이벤트)
+router.delete('/account', async (req, res) => {
+  try {
+    const deleted = await deleteAccount({ userId: req.user.id, sequelize, User, History, Favorite, Event });
+    if (!deleted) return res.status(404).json({ error: 'User not found.' });
+    console.log(`🗑️ Deleted account ${req.user.id}`, deleted);
+    return res.json({ message: 'Account deleted.', deleted });
+  } catch (error) {
+    console.error('❌ Account Delete Error:', error.message);
+    return res.status(500).json({ error: 'Failed to delete account.' });
   }
 });
 
