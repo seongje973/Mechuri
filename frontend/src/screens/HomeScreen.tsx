@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { apiFetch } from '../api/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, fonts, layout, radii, spacing, typography } from '../theme';
 
 interface HomeScreenProps {
   navigation: any;
@@ -23,21 +24,6 @@ interface RankingItem {
   category: string;
   count: number;
 }
-
-// 디자인 시안(크림 테마) 색상. 앱 전체 테마 정리 전까지 홈 화면에서만 쓴다.
-const C = {
-  cream: '#FFF7EC',
-  surface: '#FFFFFF',
-  shell: '#F3E4CC',
-  line: '#EAD9C0',
-  ink: '#2E2219',
-  muted: '#75604F',
-  yolk: '#F5A623',
-  yolkDeep: '#D98A0B',
-  quail: '#B07A4A',
-  feather: '#8A5A32',
-  blush: '#F28B6B',
-};
 
 export const FALLBACK_RANKING: RankingItem[] = [
   { rank: 1, menuName: '삼겹살', emoji: '🥩', category: '한식', count: 18 },
@@ -180,7 +166,7 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
         <View style={styles.rankingCard}>
           {loadingRanking ? (
             <View style={styles.rankingLoading}>
-              <ActivityIndicator size="small" color={C.yolkDeep} />
+              <ActivityIndicator size="small" color={colors.yolkDeep} />
               <Text style={styles.rankingLoadingText}>랭킹을 불러오는 중이에요</Text>
             </View>
           ) : (
@@ -219,10 +205,10 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: C.cream,
+    backgroundColor: colors.cream,
   },
   container: {
-    paddingHorizontal: 20,
+    paddingHorizontal: layout.screenPadding,
     paddingTop: 10,
   },
   header: {
@@ -232,48 +218,46 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   appTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: C.feather,
-    letterSpacing: 1,
+    ...typography.title,
+    color: colors.feather,
   },
   profileBadge: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: C.surface,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: C.line,
+    borderColor: colors.line,
   },
   profileEmoji: {
     fontSize: 20,
   },
   hero: {
-    backgroundColor: C.surface,
-    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     paddingVertical: 24,
     paddingHorizontal: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: C.line,
+    borderColor: colors.line,
     marginBottom: 28,
   },
   bubble: {
-    backgroundColor: C.shell,
-    borderRadius: 16,
+    backgroundColor: colors.shell,
+    borderRadius: radii.md,
     paddingVertical: 10,
     paddingHorizontal: 16,
     marginBottom: 14,
     maxWidth: '100%',
   },
   bubbleText: {
-    color: C.ink,
-    fontSize: 15,
-    fontWeight: '700',
+    color: colors.ink,
+    fontFamily: fonts.display,
+    fontSize: 18,
+    lineHeight: 24,
     textAlign: 'center',
-    lineHeight: 22,
   },
   bubbleTail: {
     position: 'absolute',
@@ -281,40 +265,38 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 12,
     height: 12,
-    backgroundColor: C.shell,
+    backgroundColor: colors.shell,
     transform: [{ rotate: '45deg' }],
   },
   ctaButton: {
     alignSelf: 'stretch',
-    backgroundColor: C.yolk,
-    borderRadius: 16,
+    backgroundColor: colors.yolk,
+    borderRadius: radii.md,
     borderBottomWidth: 4,
-    borderBottomColor: C.yolkDeep,
+    borderBottomColor: colors.yolkDeep,
     paddingVertical: 18,
     alignItems: 'center',
     marginTop: 18,
   },
   ctaText: {
-    color: C.ink,
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1,
+    ...typography.button,
+    fontSize: 20,
+    lineHeight: 28,
+    color: colors.ink,
   },
   ctaHint: {
-    color: C.muted,
-    fontSize: 12.5,
+    ...typography.caption,
+    color: colors.muted,
     marginTop: 10,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: C.ink,
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.ink,
+    marginBottom: spacing.md,
   },
   sectionTitleInline: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: C.ink,
+    ...typography.heading,
+    color: colors.ink,
   },
   row: {
     flexDirection: 'row',
@@ -323,11 +305,11 @@ const styles = StyleSheet.create({
   },
   subCard: {
     width: '48%',
-    backgroundColor: C.surface,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     padding: 16,
     borderWidth: 1,
-    borderColor: C.line,
+    borderColor: colors.line,
     borderBottomWidth: 4,
   },
   subEmoji: {
@@ -336,13 +318,13 @@ const styles = StyleSheet.create({
   },
   subTitle: {
     fontSize: 15,
-    fontWeight: '800',
-    color: C.ink,
+    fontFamily: fonts.bold,
+    color: colors.ink,
     marginBottom: 4,
   },
   subDesc: {
-    fontSize: 12,
-    color: C.muted,
+    ...typography.caption,
+    color: colors.muted,
   },
   rankingHeaderRow: {
     flexDirection: 'row',
@@ -355,17 +337,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   refreshBtnText: {
-    color: C.muted,
-    fontSize: 12,
-    fontWeight: '600',
+    ...typography.caption,
+    color: colors.muted,
   },
   rankingCard: {
-    backgroundColor: C.surface,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     paddingVertical: 4,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: C.line,
+    borderColor: colors.line,
     marginBottom: 20,
   },
   rankingLoading: {
@@ -375,9 +356,9 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   rankingLoadingText: {
-    color: C.muted,
-    fontSize: 12,
-    marginLeft: 8,
+    ...typography.caption,
+    color: colors.muted,
+    marginLeft: spacing.sm,
   },
   rankingRow: {
     flexDirection: 'row',
@@ -386,17 +367,17 @@ const styles = StyleSheet.create({
   },
   rankingBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: C.line,
+    borderBottomColor: colors.line,
   },
   rankNumber: {
     width: 22,
     fontSize: 14,
-    fontWeight: '900',
-    color: C.muted,
+    fontFamily: fonts.bold,
+    color: colors.muted,
     textAlign: 'center',
   },
   rankTop: {
-    color: C.yolkDeep,
+    color: colors.yolkDeep,
   },
   rankMenuEmoji: {
     fontSize: 20,
@@ -404,34 +385,35 @@ const styles = StyleSheet.create({
   },
   rankMenuName: {
     flex: 1,
-    color: C.ink,
+    color: colors.ink,
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
   },
   rankMenuCategory: {
-    color: C.muted,
+    color: colors.muted,
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fonts.medium,
   },
   loginCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: C.shell,
-    borderRadius: 16,
+    backgroundColor: colors.shell,
+    borderRadius: radii.md,
     padding: 14,
     marginBottom: 12,
   },
   loginText: {
     flex: 1,
-    color: C.ink,
-    fontSize: 12.5,
+    color: colors.ink,
+    fontFamily: fonts.body,
+    fontSize: 13,
     lineHeight: 18,
-    paddingRight: 8,
+    paddingRight: spacing.sm,
   },
   loginGo: {
-    color: C.feather,
+    color: colors.feather,
     fontSize: 13,
-    fontWeight: '800',
+    fontFamily: fonts.bold,
   },
 });
 
@@ -440,16 +422,17 @@ const quail = StyleSheet.create({
     alignItems: 'center',
   },
   plume: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: C.feather,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    lineHeight: 34,
+    color: colors.feather,
     marginBottom: -8,
   },
   body: {
     width: 104,
     height: 92,
     borderRadius: 52,
-    backgroundColor: C.quail,
+    backgroundColor: colors.quail,
   },
   belly: {
     position: 'absolute',
@@ -461,7 +444,7 @@ const quail = StyleSheet.create({
     borderTopRightRadius: 34,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    backgroundColor: C.cream,
+    backgroundColor: colors.cream,
   },
   eye: {
     position: 'absolute',
@@ -469,7 +452,7 @@ const quail = StyleSheet.create({
     width: 9,
     height: 11,
     borderRadius: 5,
-    backgroundColor: C.ink,
+    backgroundColor: colors.ink,
   },
   cheek: {
     position: 'absolute',
@@ -477,7 +460,7 @@ const quail = StyleSheet.create({
     width: 12,
     height: 7,
     borderRadius: 4,
-    backgroundColor: C.blush,
+    backgroundColor: colors.blush,
     opacity: 0.7,
   },
   beak: {
@@ -489,6 +472,6 @@ const quail = StyleSheet.create({
     height: 9,
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 6,
-    backgroundColor: C.yolk,
+    backgroundColor: colors.yolk,
   },
 });
