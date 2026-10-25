@@ -20,6 +20,8 @@ export type AppEvent =
   | { type: 'reject'; payload: { menu: string; retries: number } };
 
 interface QueuedEvent {
+  /** 재전송해도 서버가 한 번만 저장하도록 이벤트마다 붙이는 ID */
+  eventId: string;
   type: AppEvent['type'];
   payload: Record<string, unknown>;
   sessionId: string;
@@ -62,7 +64,7 @@ export const getDeviceId = (): Promise<string> => {
 /** 이벤트를 큐에 넣고 잠시 뒤 보낸다. sessionId가 없으면 (추천 시작 전) 버린다 */
 export const track = (sessionId: string | null, event: AppEvent): void => {
   if (!sessionId) return;
-  queue.push({ type: event.type, payload: (event.payload ?? {}) as Record<string, unknown>, sessionId, occurredAt: new Date().toISOString() });
+  queue.push({ eventId: Crypto.randomUUID(), type: event.type, payload: (event.payload ?? {}) as Record<string, unknown>, sessionId, occurredAt: new Date().toISOString() });
   if (queue.length > MAX_QUEUE) queue = queue.slice(queue.length - MAX_QUEUE);
 
   if (queue.length >= BATCH_SIZE) {
@@ -89,14 +91,15 @@ export const flushEvents = (): Promise<void> => {
           ok = res.ok;
           // 400은 다시 보내도 같은 결과라 버린다
           if (!ok && res.status === 400) {
-            queue = queue.slice(batch.length);
+            queue = queue.filter(e => !batch.includes(e));
             continue;
           }
         } catch {
           ok = false;
         }
         if (!ok) return; // 네트워크·서버 오류: 남겨 두고 다음 기회에
-        queue = queue.slice(batch.length);
+        // 보내는 사이 track()이 앞쪽을 잘라냈을 수 있어 위치가 아닌 객체로 지운다
+        queue = queue.filter(e => !batch.includes(e));
       }
     } finally {
       flushing = null;

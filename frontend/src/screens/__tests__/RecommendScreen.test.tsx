@@ -142,6 +142,18 @@ describe('RecommendScreen', () => {
     expect(addHistory).toHaveBeenCalledWith(expect.objectContaining({ menuName: shownTop() }));
   });
 
+  it('즐겨찾기를 못 읽어도 최근 먹은 기록 감점은 적용된다', async () => {
+    await reachReveal();
+    const first = shownTop();
+    screen.unmount();
+
+    const { getFavorites, getHistories } = jest.requireMock('../../storage/userData');
+    getFavorites.mockRejectedValueOnce(new Error('favorites failed'));
+    getHistories.mockResolvedValueOnce([{ menuName: first, createdAt: Date.now() }]);
+    await reachReveal();
+    expect(shownTop()).not.toBe(first);
+  });
+
   it('기록 저장이 실패하면 먹을래요가 다시 눌리는 상태로 남는다', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
@@ -200,6 +212,56 @@ describe('RecommendScreen', () => {
     expect(screen.queryByText(/메뉴는…/)).toBeNull();
     expect(screen.getByText(/^질문 \d+ \/ 7$/)).toBeTruthy();
     expect(screen.getByText('👍 예')).toBeTruthy();
+  });
+
+  describe('날씨 보정 (L-02)', () => {
+    const Location = jest.requireMock('expo-location');
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const weatherCalls = () => apiFetch.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/weather'));
+
+    beforeEach(() => apiFetch.mockClear());
+    afterEach(() => {
+      Location.requestForegroundPermissionsAsync.mockImplementation(async () => ({ status: 'denied' }));
+      apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+    });
+
+    it('추천을 시작한 뒤에 GPS가 잡혀도 날씨를 받는다', async () => {
+      let grant!: (v: unknown) => void;
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(() => new Promise(r => (grant = r)));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      renderScreen();
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      expect(weatherCalls()).toHaveLength(0);
+      await act(async () => {
+        grant({ status: 'granted' });
+      });
+      expect(weatherCalls()).toHaveLength(1);
+    });
+
+    it('날씨 응답이 늦어도 잠깐만 기다리고 결과를 보여 준다', async () => {
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(async () => ({ status: 'granted' }));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      apiFetch.mockImplementation((path: string) =>
+        String(path).startsWith('/api/weather')
+          ? new Promise(() => {})
+          : Promise.resolve({ ok: true, json: async () => ({ restaurants: [], histories: [] }) })
+      );
+      renderScreen();
+      await act(async () => {});
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      expect(weatherCalls()).toHaveLength(1);
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+        if (!screen.queryByText('👍 예')) break;
+      }
+      expect(await screen.findByText('당신이 생각한 메뉴는…', {}, { timeout: 3000 })).toBeTruthy();
+    });
   });
 });
 

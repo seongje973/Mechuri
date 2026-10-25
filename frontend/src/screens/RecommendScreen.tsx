@@ -39,7 +39,7 @@ import {
   shouldStop,
   toRecommendSession
 } from '../engine/recommendFlow';
-import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
+import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
 import { personalAdjustments } from '../engine/personalize';
 import { RecommendContext, contextAdjustments, mergeAdjustments } from '../engine/context';
 
@@ -100,6 +100,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
   // 추천을 시작할 때 미리 받아 두는 날씨 (L-02). 못 받으면 시간대만 쓴다
   const weatherRef = useRef<RecommendContext['weather']>(null);
+  // 추천 한 판마다 올라가는 번호. 이전 판의 늦은 날씨 응답이 새 판을 덮지 않게 한다
+  const weatherRoundRef = useRef(0);
+  const weatherPromiseRef = useRef<Promise<void> | null>(null);
   const [eatenMenu, setEatenMenu] = useState<string | null>(null);
   const [favorited, setFavorited] = useState(false);
   const selectedNameRef = useRef<string | null>(null);
@@ -205,8 +208,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       return;
     }
 
+    weatherRoundRef.current += 1;
     weatherRef.current = null;
-    void loadWeather();
+    weatherPromiseRef.current = userCoords ? loadWeather(userCoords, weatherRoundRef.current) : null;
     finishTokenRef.current += 1;
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
@@ -239,7 +243,6 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     goNext(next);
   };
 
-  // 잘못 누른 답을 되돌린다
   // 잘못 누른 답을 되돌린다. 결과 화면에서도 마지막 답을 고칠 수 있다
   const handleUndo = () => {
     const prev = history[history.length - 1];
@@ -255,28 +258,44 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
-  const loadWeather = async () => {
-    if (!userCoords) return;
+  const loadWeather = async (coords: { latitude: number, longitude: number }, round: number) => {
     try {
-      const res = await apiFetch(`/api/weather?lat=${userCoords.latitude}&lng=${userCoords.longitude}`, { auth: false, timeoutMs: 3000 });
+      const res = await apiFetch(`/api/weather?lat=${coords.latitude}&lng=${coords.longitude}`, { auth: false, timeoutMs: 3000 });
       if (res.ok) {
         const data = await res.json();
-        weatherRef.current = { condition: data.condition, temperature: data.temperature };
+        if (weatherRoundRef.current === round) weatherRef.current = { condition: data.condition, temperature: data.temperature };
       }
     } catch (e) {
       console.log("Weather unavailable, using time of day only");
     }
   };
 
+  // 추천을 시작한 뒤에 GPS가 잡히면 그때 날씨를 받는다
+  useEffect(() => {
+    if (userCoords && weatherRoundRef.current > 0 && !weatherPromiseRef.current) {
+      weatherPromiseRef.current = loadWeather(userCoords, weatherRoundRef.current);
+    }
+  }, [userCoords]);
+
+  // 날씨가 아직 오는 중이면 잠깐만 기다린다. 늦으면 시간대만으로 보정한다
+  const waitForWeather = async () => {
+    const pending = weatherPromiseRef.current;
+    if (!pending) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([pending, new Promise<void>(resolve => (timer = setTimeout(resolve, WEATHER_WAIT_MS)))]);
+    clearTimeout(timer);
+  };
+
   // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21). 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<Record<string, number>> => {
-    try {
-      const [histories, favorites] = await Promise.all([getHistories(), getFavorites()]);
-      return personalAdjustments({ histories, favorites });
-    } catch (e) {
-      console.log("Failed to load records for recommendation adjustments", e);
-      return {};
-    }
+    // 하나가 실패해도 나머지 기록으로 보정한다
+    const [histories, favorites] = await Promise.allSettled([getHistories(), getFavorites()]);
+    if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
+    if (favorites.status === 'rejected') console.log("Failed to load favorites for adjustments", favorites.reason);
+    return personalAdjustments({
+      histories: histories.status === 'fulfilled' ? histories.value : [],
+      favorites: favorites.status === 'fulfilled' ? favorites.value : [],
+    });
   };
 
   const showResults = (ranked: RecommendResult[], finalSession: RecommendSession | null, via?: 'worldcup') => {
@@ -310,6 +329,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     let adj = adjustments;
     let reasons = contextReasons;
     if (finalSession.rejected.length === 0) {
+      await waitForWeather();
       const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
       adj = mergeAdjustments(await loadAdjustments(), context.adjustments);
       if (token !== finishTokenRef.current) return;
@@ -441,14 +461,16 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 하트: 게스트도 기기에 저장한다. 로그인 안내는 저장소가 정한 때(3개째)만 뜬다 (US-17)
   const handleToggleFavorite = async () => {
     if (!selectedMenu) return;
+    const menuName = selectedMenu.name;
     try {
       const { favorited } = await toggleFavorite({
-        menuName: selectedMenu.name,
+        menuName,
         emoji: selectedMenu.emoji,
         category: selectedMenu.category
       });
-      setFavorited(favorited);
-      if (favorited) trackAccept('favorite', selectedMenu.name);
+      // 저장하는 사이 다른 메뉴를 골랐으면 그 메뉴 하트를 덮어쓰지 않는다
+      if (selectedNameRef.current === menuName) setFavorited(favorited);
+      if (favorited) trackAccept('favorite', menuName);
     } catch (e) {
       Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
     }
