@@ -2,7 +2,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import GroupResult from '../group/GroupResult';
 import { RoomState } from '../../api/roomSocket';
-import MenuBracket from '../../components/MenuBracket';
+import MiniWorldCup from '../../components/MiniWorldCup';
 
 const TestRenderer = require('react-test-renderer');
 const { act } = TestRenderer;
@@ -47,7 +47,16 @@ describe('GroupResult', () => {
     act(() => renderer.update(
       <GroupResult state={finishedState([[], []], { candidates, deadline: 1, votedIds: [], winner: null, tally: null })} {...props} />
     ));
-    expect(renderer.root.findAllByType(MenuBracket)).toHaveLength(1);
+    expect(renderer.root.findAllByType(MiniWorldCup)).toHaveLength(1);
+
+    // 4강 두 판과 결승을 고르면 내 표가 서버로 간다
+    const pickFirst = () => {
+      const card = renderer.root.findByType(MiniWorldCup).findAll((n: any) => typeof n.props.onPress === 'function' && n.props.activeOpacity)[0];
+      act(() => card.props.onPress());
+    };
+    pickFirst(); pickFirst(); pickFirst();
+    await act(async () => {});
+    expect(props.onVote).toHaveBeenCalledWith(candidates[0]);
   });
 
   it('서버가 정한 우승 메뉴를 보여주고 근처 식당으로 보낸다', () => {

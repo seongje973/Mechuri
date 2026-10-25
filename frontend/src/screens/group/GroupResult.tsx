@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MENU_DATA } from '../../constants/menuData';
+import { MENU_DATA, MenuItem } from '../../constants/menuData';
 import { GroupMember, GroupResult as GroupScore, groupReasons, scoreGroup } from '../../engine/groupScore';
 import { RoomState } from '../../api/roomSocket';
-import MenuBracket, { BracketMenu } from '../../components/MenuBracket';
+import MiniWorldCup from '../../components/MiniWorldCup';
 import { G, gs } from './groupTheme';
 
 interface Props {
@@ -24,10 +24,9 @@ export const membersFromState = (state: RoomState): GroupMember[] =>
     left: a.left,
   }));
 
-const toBracketMenu = (name: string): BracketMenu => {
-  const item = MENU_DATA.find(m => m.name === name);
-  return { name, emoji: item?.emoji, desc: item?.desc };
-};
+// 후보는 서버가 받은 이름 그대로라서, 이 앱 메뉴 데이터에 없는 이름이 와도 보여줄 수 있게
+const toMenuItem = (name: string): MenuItem =>
+  MENU_DATA.find(m => m.name === name) ?? ({ ...MENU_DATA[0], name, emoji: '🍽️', desc: '' } as MenuItem);
 
 /**
  * 결과 화면 (US-27~29). 점수는 각 폰이 같은 답으로 똑같이 계산하고,
@@ -49,7 +48,7 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
     });
   }, [group.needsVote, vote]);
 
-  const bracketMenus = useMemo(() => (vote ? vote.candidates.map(toBracketMenu) : []), [vote?.candidates.join('|')]);
+  const bracketMenus = useMemo(() => (vote ? vote.candidates.map(toMenuItem) : []), [vote?.candidates.join('|')]);
 
   if (group.ranked.length === 0) {
     return (
@@ -81,10 +80,10 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
               </Text>
             </>
           ) : (
-            <MenuBracket
+            <MiniWorldCup
               menus={bracketMenus}
-              colors={{ surface: G.surface, line: G.line, ink: G.ink, muted: G.muted, accent: G.feather }}
-              onFinish={winner => {
+              title="우리 중 누구 편이야?"
+              onWinner={winner => {
                 setMyPick(winner.name);
                 onVote(winner.name).then(ack => {
                   // 표가 안 들어갔으면 다시 고르게 한다
