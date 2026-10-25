@@ -83,7 +83,8 @@ export default function MyPageScreen({
       if (isGuest) requestLoginPrompt('mypage');
     });
     return unsubscribe;
-  }, [navigation, isGuest, loadUserData]);
+    // userProfile이 바뀌면(예: 앱 시작 때 남은 게스트 기록을 다시 옮긴 뒤) 새로 읽는다
+  }, [navigation, isGuest, userProfile, loadUserData]);
 
   // Real OAuth Kakao Login
   const handleRealKakaoLogin = async () => {
