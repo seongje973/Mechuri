@@ -29,12 +29,8 @@ interface Restaurant {
   type: string;
 }
 
-const getOfflineFallbackRestaurants = (menuName: string): Restaurant[] => {
-  return [
-    { name: `가마솥 전통 ${menuName} 마포본점`, rating: '⭐ 4.8', distance: '150m', category: '음식점', url: `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(menuName)}`, address: '서울시 마포구 역삼로', type: '오프라인 추천' },
-    { name: `소문난 3대 맛집 ${menuName}`, rating: '⭐ 4.6', distance: '380m', category: '전문 식당', url: `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(menuName)}`, address: '서울시 강남구 테헤란로', type: '인기 매장' },
-  ];
-};
+// 위치를 못 받았을 때 쓰는 기본 위치 (강남역). 화면에도 그렇게 표시한다
+const DEFAULT_COORDS = { latitude: 37.497942, longitude: 127.0276197 };
 
 interface WorldCupScreenProps {
   navigation: any;
@@ -64,6 +60,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
   const [restaurantsList, setRestaurantsList] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  const [restaurantsError, setRestaurantsError] = useState(false);
 
   // 컴포넌트 마운트 시 위치 권한 요청 및 좌표 획득
   useEffect(() => {
@@ -132,6 +129,26 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
     }
   };
 
+  // 주변 식당 검색. 실패하면 지어낸 식당 대신 오류와 다시 시도 버튼을 보여 준다
+  const loadRestaurants = async (menuName: string) => {
+    setLoadingRestaurants(true);
+    setRestaurantsError(false);
+    setRestaurantsList([]);
+    try {
+      const { latitude, longitude } = userCoords ?? DEFAULT_COORDS;
+      const url = `/api/restaurants?keyword=${encodeURIComponent(menuName)}&x=${longitude}&y=${latitude}`;
+      const response = await apiFetch(url, { timeoutMs: 8000 });
+      if (!response.ok) throw new Error(`restaurants ${response.status}`);
+      const data = await response.json();
+      setRestaurantsList(data.restaurants || []);
+    } catch (error) {
+      console.log("Failed to load restaurants for WorldCup winner", error);
+      setRestaurantsError(true);
+    } finally {
+      setLoadingRestaurants(false);
+    }
+  };
+
   // 최종 우승 처리 및 맛집 API 동기화
   const finishWorldCup = async (winner: MenuItem) => {
     setWinnerMenu(winner);
@@ -145,27 +162,9 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
         console.log("Failed to load WorldCup winner favorite state", e);
         setWinnerFavorited(prev => (prev === null ? false : prev));
       });
-    setLoadingRestaurants(true);
-    setRestaurantsList([]);
 
     // 1. 주변 식당 목록 API 호출
-    try {
-      const lat = userCoords?.latitude || '37.497942';
-      const lng = userCoords?.longitude || '127.0276197';
-      const url = `/api/restaurants?keyword=${encodeURIComponent(winner.name)}&x=${lng}&y=${lat}`;
-
-      const response = await apiFetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setRestaurantsList(data.restaurants || []);
-      } else {
-        setRestaurantsList(getOfflineFallbackRestaurants(winner.name));
-      }
-    } catch (error) {
-      setRestaurantsList(getOfflineFallbackRestaurants(winner.name));
-    } finally {
-      setLoadingRestaurants(false);
-    }
+    await loadRestaurants(winner.name);
 
     // 2. 우승 메뉴를 식사 기록에 저장 (게스트는 이 기기에, 로그인은 서버에)
     try {
@@ -373,13 +372,20 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
           {/* 주변 식당 매칭 */}
           <View style={styles.restaurantsSection}>
             <Text style={styles.restaurantsTitle}>
-              📍 내 GPS 주변 실제 {winnerMenu.name} 식당 목록
+              📍 {userCoords ? '내 주변' : '강남역 근처 (위치 권한 없음)'} {winnerMenu.name} 식당
             </Text>
 
             {loadingRestaurants ? (
               <View style={styles.loadingWrapper}>
                 <ActivityIndicator size="large" color="#fbbf24" />
                 <Text style={styles.loadingText}>메추리가 실제 식당 정보를 검색하는 중...</Text>
+              </View>
+            ) : restaurantsError ? (
+              <View style={styles.emptyWrapper}>
+                <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</Text>
+                <TouchableOpacity style={styles.reloadBtn} onPress={() => loadRestaurants(winnerMenu.name)}>
+                  <Text style={styles.reloadBtnText}>다시 시도</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               restaurantsList.length > 0 ? (
@@ -776,6 +782,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
+  },
+  reloadBtn: {
+    marginTop: 12,
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  reloadBtnText: {
+    color: '#fbbf24',
+    fontSize: 13,
+    fontWeight: '700',
   },
   emptyText: {
     color: '#78716c',
