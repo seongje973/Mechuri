@@ -222,6 +222,26 @@ describe('RecommendScreen', () => {
     isFavorite.mockImplementation(async () => false);
   });
 
+  it('하트를 빠르게 연달아 눌러도 저장은 하나씩 차례로 한다', async () => {
+    const { toggleFavorite } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    toggleFavorite.mockClear();
+    let finishFirst!: (v: { favorited: boolean; count: number }) => void;
+    toggleFavorite.mockImplementationOnce(() => new Promise(r => (finishFirst = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    // 첫 저장이 끝나기 전에는 두 번째 저장을 시작하지 않는다
+    expect(toggleFavorite).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finishFirst({ favorited: true, count: 1 });
+    });
+    expect(toggleFavorite).toHaveBeenCalledTimes(2);
+  });
+
   it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();

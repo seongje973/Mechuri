@@ -101,6 +101,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     track(analyticsSessionRef.current, { type: 'accept', payload: { action, menu } });
   // 하트 조회·토글마다 올라가는 번호. 늦게 온 이전 결과가 하트를 되돌리지 않게 한다
   const favoriteOpRef = useRef(0);
+  // 하트 저장은 하나씩 차례로 한다. 게스트 목록은 읽고-고쳐-쓰기라 겹치면 앞 변경이 사라진다
+  const favoriteQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const revealAnim = useRef(new Animated.Value(0)).current;
 
   // 지금 묻는 질문 번호 (1부터)
@@ -399,12 +401,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (!selectedMenu) return;
     const menuName = selectedMenu.name;
     const favoriteOp = ++favoriteOpRef.current;
+    const item = { menuName, emoji: selectedMenu.emoji, category: selectedMenu.category };
+    const saving = favoriteQueueRef.current.then(() => toggleFavorite(item));
+    favoriteQueueRef.current = saving.catch(() => undefined);
     try {
-      const { favorited } = await toggleFavorite({
-        menuName,
-        emoji: selectedMenu.emoji,
-        category: selectedMenu.category
-      });
+      const { favorited } = await saving;
       // 저장하는 사이 다른 메뉴를 골랐거나 다시 조회했으면 덮어쓰지 않는다
       if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) setFavorited(favorited);
       if (favorited) trackAccept('favorite', menuName);
