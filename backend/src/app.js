@@ -37,7 +37,8 @@ const initDatabase = async () => {
     console.error('❌ Failed to sync database tables:', error.message);
   }
 };
-initDatabase();
+// 닫힌 지 30일 지난 같이 정하기 방 기록 정리 (6시간마다)
+initDatabase().then(() => require('./realtime/roomCleanup').startRoomCleanup());
 
 // Basic Route
 app.get('/', (req, res) => {

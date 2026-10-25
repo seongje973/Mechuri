@@ -6,6 +6,7 @@ const Favorite = require('../models/Favorite');
 const History = require('../models/History');
 const { sequelize } = require('../config/db');
 const Event = require('../models/Event');
+const Participant = require('../models/Participant');
 const { ImportError, normalizeImportPayload, planImport } = require('../user/guestImport');
 const { deleteAccount } = require('../user/deleteAccount');
 
@@ -226,10 +227,10 @@ router.post('/import', async (req, res) => {
   }
 });
 
-// 11. DELETE Account (회원 탈퇴: 계정, 식사 기록, 즐겨찾기, 기피 태그, 계정에 묶인 지표 이벤트)
+// 11. DELETE Account (회원 탈퇴: 계정, 식사 기록, 즐겨찾기, 기피 태그, 계정에 묶인 지표 이벤트. 같이 정하기 참가 기록은 계정 연결만 끊음)
 router.delete('/account', async (req, res) => {
   try {
-    const deleted = await deleteAccount({ userId: req.user.id, sequelize, User, History, Favorite, Event });
+    const deleted = await deleteAccount({ userId: req.user.id, sequelize, User, History, Favorite, Event, Participant });
     if (!deleted) return res.status(404).json({ error: 'User not found.' });
     console.log(`🗑️ Deleted account ${req.user.id}`, deleted);
     return res.json({ message: 'Account deleted.', deleted });

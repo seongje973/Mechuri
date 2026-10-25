@@ -107,6 +107,33 @@ describe('게스트 저장소', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('저장 중이던 게스트 기록도 이관에 포함한다', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ imported: { histories: 1, favorites: 0 }, avoidTags: '' }),
+    });
+    // 게스트 기록 쓰기를 붙잡아 두고, 그사이 로그인해 이관을 시작한다
+    let release = () => {};
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    const realSetItem = setItem.getMockImplementation()!;
+    setItem.mockImplementationOnce(async (key: string, value: string) => {
+      await gate;
+      return realSetItem(key, value);
+    });
+    const pending = addHistory({ menuName: '김치찌개' });
+    await flush();
+    await saveSession('jwt-1', { id: 1 });
+    const importing = importGuestData();
+    await flush();
+    release();
+    await Promise.all([pending, importing]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.histories.map((h: any) => h.menuName)).toEqual(['김치찌개']);
+  });
+
   it('이관이 실패하면 기기 기록을 남겨 다음에 다시 시도할 수 있다', async () => {
     await addHistory({ menuName: '김치찌개' });
     await saveSession('jwt-1', { id: 1 });

@@ -200,6 +200,8 @@ export interface GuestImportResult {
 export const importGuestData = async (): Promise<GuestImportResult> => {
   const none = { imported: false, histories: 0, favorites: 0 };
   if (await isGuest()) return none;
+  // 아직 쓰는 중인 게스트 기록이 있으면 끝난 뒤에 읽어야 옮기기·지우기에서 빠지지 않는다
+  await guestHistoryQueue;
 
   const [histories, favorites, rawTags] = await Promise.all([
     readList<HistoryEntry>(GUEST_KEYS.histories),
