@@ -134,6 +134,39 @@ describe('게스트 저장소', () => {
     expect(body.histories.map((h: any) => h.menuName)).toEqual(['김치찌개']);
   });
 
+  it('저장 중이던 게스트 즐겨찾기도 이관에 포함한다', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ imported: { histories: 0, favorites: 1 }, avoidTags: '' }),
+    });
+    let release = () => {};
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    const realSetItem = setItem.getMockImplementation()!;
+    setItem.mockImplementationOnce(async (key: string, value: string) => {
+      await gate;
+      return realSetItem(key, value);
+    });
+    const pending = toggleFavorite({ menuName: '초밥' });
+    await flush();
+    await saveSession('jwt-1', { id: 1 });
+    const importing = importGuestData();
+    await flush();
+    release();
+    await Promise.all([pending, importing]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.favorites.map((f: any) => f.menuName)).toEqual(['초밥']);
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBeNull();
+  });
+
+  it('기기 즐겨찾기를 읽지 못하면 덮어쓰지 않는다', async () => {
+    await AsyncStorage.setItem(GUEST_KEYS.favorites, '{깨진 JSON');
+    await expect(toggleFavorite({ menuName: '초밥' })).rejects.toThrow();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBe('{깨진 JSON');
+  });
+
   it('이관이 실패하면 기기 기록을 남겨 다음에 다시 시도할 수 있다', async () => {
     await addHistory({ menuName: '김치찌개' });
     await saveSession('jwt-1', { id: 1 });

@@ -55,6 +55,22 @@ const readList = async <T>(key: string): Promise<T[]> => {
   }
 };
 
+// 읽고-고쳐-쓰기용. 읽기에 실패하면 빈 목록으로 덮어쓰지 않도록 오류를 그대로 던진다
+const readListStrict = async <T>(key: string): Promise<T[]> => {
+  const raw = await AsyncStorage.getItem(key);
+  const parsed = raw ? JSON.parse(raw) : [];
+  return Array.isArray(parsed) ? parsed : [];
+};
+
+// 게스트 기록·즐겨찾기 쓰기와 로그인 이관을 하나씩 차례로 실행한다.
+// 게스트인지 확인하는 것부터 큐 안에서 해야, 확인과 쓰기 사이에 이관이 끼어들지 않는다
+let guestQueue: Promise<unknown> = Promise.resolve();
+const withGuestLock = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = guestQueue.then(task);
+  guestQueue = run.catch(() => undefined);
+  return run;
+};
+
 const writeList = (key: string, list: unknown[]) => AsyncStorage.setItem(key, JSON.stringify(list));
 
 const requestJson = async (path: string, init: Parameters<typeof apiFetch>[1] = {}) => {
@@ -92,22 +108,16 @@ export const getHistories = async (): Promise<HistoryEntry[]> => {
   return (data.histories ?? []).map(toHistory);
 };
 
-// 게스트 기록은 읽고-고쳐-쓰기라 저장이 겹치면 앞 기록이 사라진다. 하나씩 차례로 쓴다
-let guestHistoryQueue: Promise<unknown> = Promise.resolve();
-
-export const addHistory = async (entry: NewHistory): Promise<void> => {
-  if (await isGuest()) {
-    const run = guestHistoryQueue.then(async () => {
-      const list = await readList<HistoryEntry>(GUEST_KEYS.histories);
+export const addHistory = (entry: NewHistory): Promise<void> =>
+  withGuestLock(async () => {
+    if (await isGuest()) {
+      const list = await readListStrict<HistoryEntry>(GUEST_KEYS.histories);
       const next = [{ ...entry, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT);
       await writeList(GUEST_KEYS.histories, next);
-    });
-    guestHistoryQueue = run.catch(() => undefined);
-    await run;
-    return;
-  }
-  await requestJson('/api/user/histories', { method: 'POST', body: entry });
-};
+      return;
+    }
+    await requestJson('/api/user/histories', { method: 'POST', body: entry });
+  });
 
 export const clearHistories = async (): Promise<void> => {
   if (await isGuest()) {
@@ -133,26 +143,27 @@ export const isFavorite = async (menuName: string): Promise<boolean> =>
  * 있으면 빼고 없으면 넣는다. 결과로 지금 즐겨찾기 상태와 개수를 돌려준다.
  * 게스트가 즐겨찾기를 늘리면 로그인 안내(바텀시트)를 띄울지 loginPrompt가 판단한다.
  */
-export const toggleFavorite = async (item: NewFavorite): Promise<{ favorited: boolean; count: number }> => {
-  const guest = await isGuest();
-  const list = await getFavorites();
-  const exists = list.some(f => f.menuName === item.menuName);
+export const toggleFavorite = (item: NewFavorite): Promise<{ favorited: boolean; count: number }> =>
+  withGuestLock(async () => {
+    const guest = await isGuest();
+    const list = guest ? await readListStrict<FavoriteEntry>(GUEST_KEYS.favorites) : await getFavorites();
+    const exists = list.some(f => f.menuName === item.menuName);
 
-  if (guest) {
-    const next = exists
-      ? list.filter(f => f.menuName !== item.menuName)
-      : [{ ...item, createdAt: new Date().toISOString() }, ...list];
-    await writeList(GUEST_KEYS.favorites, next);
-  } else if (exists) {
-    await requestJson('/api/user/favorites', { method: 'DELETE', body: { menuName: item.menuName } });
-  } else {
-    await requestJson('/api/user/favorites', { method: 'POST', body: item });
-  }
+    if (guest) {
+      const next = exists
+        ? list.filter(f => f.menuName !== item.menuName)
+        : [{ ...item, createdAt: new Date().toISOString() }, ...list];
+      await writeList(GUEST_KEYS.favorites, next);
+    } else if (exists) {
+      await requestJson('/api/user/favorites', { method: 'DELETE', body: { menuName: item.menuName } });
+    } else {
+      await requestJson('/api/user/favorites', { method: 'POST', body: item });
+    }
 
-  const result = { favorited: !exists, count: list.length + (exists ? -1 : 1) };
-  if (guest && result.favorited) notifyFavoriteSaved(result.count);
-  return result;
-};
+    const result = { favorited: !exists, count: list.length + (exists ? -1 : 1) };
+    if (guest && result.favorited) notifyFavoriteSaved(result.count);
+    return result;
+  });
 
 // --- 기피 태그 ---
 
@@ -197,11 +208,9 @@ export interface GuestImportResult {
  * 로그인 직후(토큰 저장 후) 부른다. 기기에 남은 게스트 기록을 서버로 옮기고, 성공하면 기기 쪽을 비운다.
  * 실패하면 기기 기록을 그대로 두므로 다음 앱 실행 때 다시 시도된다. 서버는 같은 기록을 두 번 받아도 한 번만 저장한다.
  */
-export const importGuestData = async (): Promise<GuestImportResult> => {
+export const importGuestData = (): Promise<GuestImportResult> => withGuestLock(async () => {
   const none = { imported: false, histories: 0, favorites: 0 };
   if (await isGuest()) return none;
-  // 아직 쓰는 중인 게스트 기록이 있으면 끝난 뒤에 읽어야 옮기기·지우기에서 빠지지 않는다
-  await guestHistoryQueue;
 
   const [histories, favorites, rawTags] = await Promise.all([
     readList<HistoryEntry>(GUEST_KEYS.histories),
@@ -224,7 +233,7 @@ export const importGuestData = async (): Promise<GuestImportResult> => {
     favorites: data.imported?.favorites ?? 0,
     avoidTags: parseAvoidTags(data.avoidTags),
   };
-};
+});
 
 // --- 회원 탈퇴 ---
 
