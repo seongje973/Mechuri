@@ -221,4 +221,24 @@ describe('RecommendScreen', () => {
     expect(screen.getByText('❤️')).toBeTruthy();
     isFavorite.mockImplementation(async () => false);
   });
+
+  it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    addHistory.mockClear();
+    addHistory.mockImplementationOnce(() => new Promise(() => {}));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    const altName = screen.getAllByTestId('alt-name')[0].props.children as string;
+    await act(async () => {
+      fireEvent.press(screen.getByText(altName));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    const saved = addHistory.mock.calls.map((c: any[]) => c[0].menuName);
+    expect(saved).toHaveLength(2);
+    expect(saved[1]).toBe(altName);
+  });
 });
