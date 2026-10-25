@@ -332,6 +332,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const round = weatherRoundRef.current;
     // 화면을 떠나면 판이 끝난다 (analyticsSessionRef가 비워짐)
     const analyticsSession = analyticsSessionRef.current;
+    // 새 시작 요청은 기피 태그를 읽는 동안 판 번호를 아직 올리지 않았으므로 요청 번호도 본다
+    const startRequest = startRequestRef.current;
     // "틀렸어요" 뒤에는 처음 계산한 보정값을 그대로 쓴다
     let adj = adjustments;
     let reasons = contextReasons;
@@ -340,7 +342,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
       const personal = await loadAdjustments();
       // 날씨·보정값을 기다리는 사이 새 추천을 시작했으면 이전 판 결과를 띄우지 않는다
-      if (weatherRoundRef.current !== round || analyticsSessionRef.current !== analyticsSession) return;
+      if (
+        weatherRoundRef.current !== round ||
+        analyticsSessionRef.current !== analyticsSession ||
+        startRequestRef.current !== startRequest
+      ) return;
       adj = mergeAdjustments(personal, context.adjustments);
       reasons = context.reasons;
       setAdjustments(adj);
