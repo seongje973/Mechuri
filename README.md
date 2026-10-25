@@ -26,6 +26,7 @@ docker compose -f backend/docker-compose.yml up -d
 ```
 
 서버를 처음 켜면 Sequelize가 테이블을 자동으로 만듭니다 (`NODE_ENV`가 `production`이 아니면 `sync({ alter: true })`).
+운영 서버는 테이블을 자동으로 바꾸지 않고 `backend/migrations/`의 마이그레이션만 적용합니다. 모델을 바꾸면 마이그레이션도 함께 추가하세요 (아래 "DB 마이그레이션").
 
 ## 실행
 
@@ -53,9 +54,28 @@ Expo 화면의 QR 코드를 폰의 Expo Go로 찍으면 됩니다.
 
 ```bash
 npm test --prefix frontend           # 추천 엔진, API 클라이언트 테스트 (jest-expo)
-npm test --prefix backend            # 카카오 로그인 코드 교환 테스트 (node --test)
+npm test --prefix backend            # 카카오 로그인 코드 교환, 이벤트 API 테스트 (node --test)
+# 마이그레이션과 DB 로그인 코드 저장소까지 확인하려면 빈 테스트용 DB를 지정 (그 DB의 public 스키마를 지웁니다)
+TEST_DATABASE_URL=postgres://postgres:mechuri_password@127.0.0.1:5432/mechuri_test npm test --prefix backend
 npm run typecheck --prefix frontend  # 타입 검사
 ```
+
+## DB 마이그레이션
+
+```bash
+cd backend
+npm run db:migration:new -- add-rooms   # migrations/에 빈 마이그레이션 파일 만들기
+npm run db:migrate                      # 밀린 마이그레이션 적용
+npm run db:migrate:status               # 적용 상태 보기
+npm run db:migrate:undo                 # 마지막 하나 되돌리기
+```
+
+- 모델(`src/models/`)을 추가하거나 컬럼을 바꾸면 같은 PR에 마이그레이션을 넣습니다. `TEST_DATABASE_URL`로 테스트를 돌리면 모델과 마이그레이션이 어긋날 때 실패합니다.
+- 처음 두 마이그레이션은 sync로 이미 테이블이 있는 개발 DB에서도 돌 수 있게 없는 테이블만 만듭니다.
+
+## 배포
+
+`docs/deploy.md`에 서버(Render), 안드로이드 APK(EAS Build) 순서를 정리했습니다.
 
 ## 폴더
 
@@ -64,7 +84,8 @@ frontend/src/api/        서버 호출(apiFetch), 로그인 세션 저장
 frontend/src/engine/     추천 로직 (화면과 분리된 순수 함수)
 frontend/src/constants/  메뉴 데이터, 질문
 frontend/src/screens/    화면
-backend/src/routes/      auth, user, restaurants API
+backend/src/routes/      auth, user, restaurants, events API
+backend/migrations/      DB 마이그레이션 (sequelize-cli)
 docs/                    메뉴 속성 기준표 등 문서
 ```
 
@@ -73,5 +94,5 @@ docs/                    메뉴 속성 기준표 등 문서
 - 로그인하지 않아도 추천, 월드컵, 지도를 쓸 수 있습니다. 즐겨찾기·기록 저장은 로그인 후 서버에 저장됩니다.
 - 식당 검색(`/api/restaurants`)은 `KAKAO_REST_API_KEY`가 있어야 동작합니다. 키가 없으면 503을 돌려주고, 앱은 "식당 정보를 불러오지 못했어요"를 보여줍니다. 키 없이 화면만 볼 때는 `RESTAURANT_MOCK=true`로 "[샘플]" 표시된 가짜 식당을 받을 수 있습니다 (production에서는 꺼짐). 카카오 로컬 검색에는 평점이 없어서 평점은 보여주지 않습니다.
 - 카카오 로그인은 카카오 개발자 콘솔에 Redirect URI(`KAKAO_REDIRECT_URI`)를 등록해야 동작합니다.
-- 카카오 로그인이 끝나면 서버는 토큰 대신 60초짜리 1회용 코드를 딥링크로 앱에 넘기고, 앱이 로그인을 시작할 때 기기에 저장해 둔 verifier와 함께 `POST /api/auth/kakao/exchange`로 토큰을 받습니다 (PKCE 방식이라 코드만 가로채서는 쓸 수 없습니다). Expo 터널로 테스트할 때는 터널 호스트를 `EXPO_DEV_HOSTS`에 넣어야 Expo Go로 돌아옵니다.
+- 카카오 로그인이 끝나면 서버는 토큰 대신 60초짜리 1회용 코드(DB의 `LoginCodes` 테이블에 해시로 저장)를 딥링크로 앱에 넘기고, 앱이 로그인을 시작할 때 기기에 저장해 둔 verifier와 함께 `POST /api/auth/kakao/exchange`로 토큰을 받습니다 (PKCE 방식이라 코드만 가로채서는 쓸 수 없습니다). Expo 터널로 테스트할 때는 터널 호스트를 `EXPO_DEV_HOSTS`에 넣어야 Expo Go로 돌아옵니다.
 - 마이페이지의 "간편 동기화"는 개발용 단축 로그인입니다. 개발 빌드에서만 보이고, 서버도 `NODE_ENV=production`이면 막습니다.

@@ -16,6 +16,8 @@ import {
 import * as Location from 'expo-location';
 import { apiFetch, getStoredProfile } from '../api/client';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
+import MiniWorldCup from '../components/MiniWorldCup';
+import { openDelivery } from '../utils/openDelivery';
 
 const { width } = Dimensions.get('window');
 
@@ -27,12 +29,14 @@ import {
   RecommendResult,
   RecommendSession,
   answerQuestion,
+  canReject,
   getResults,
+  rejectTopResult,
   pickNextQuestion,
   shouldStop,
   toRecommendSession
 } from '../engine/recommendFlow';
-import { MAX_QUESTIONS, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
+import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
 import { recentMealAdjustments } from '../engine/personalize';
 
 const parseAvoidTags = (raw?: string | null): string[] => (raw ? raw.split(',').filter(Boolean) : []);
@@ -70,7 +74,8 @@ interface RecommendScreenProps {
 
 export default function RecommendScreen({ navigation, route, isLoggedIn, userProfile }: RecommendScreenProps) {
   // 게임 단계: 'intro' (사전 제외 장르 선택) | 'questioning' (아키네이터 구동) | 'reveal' (결과 목록)
-  const [gameState, setGameState] = useState<'intro' | 'questioning' | 'reveal'>('intro');
+  // 'worldcup': "틀렸어요"를 두 번 누르면 남은 상위 4개로 고른다 (US-15)
+  const [gameState, setGameState] = useState<'intro' | 'questioning' | 'reveal' | 'worldcup'>('intro');
   
   // 오늘 먹기 싫어 선택 제외할 음식 카테고리 상태 (다중선택)
   const [excludedCategories, setExcludedCategories] = useState<string[]>([]);
@@ -82,10 +87,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 결과: [0]이 지금 보여주는 메뉴, 나머지가 대안
   const [results, setResults] = useState<RecommendResult[]>([]);
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  // 결과 계산에 쓴 개인화 보정. "틀렸어요" 뒤 다시 계산할 때도 같은 값을 쓴다
+  const [adjustments, setAdjustments] = useState<Record<string, number>>({});
+  const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
+  // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
+  const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const revealAnim = useRef(new Animated.Value(0)).current;
 
   // 지금 묻는 질문 번호 (1부터)
   const questionNumber = (session?.answers.length ?? 0) + 1;
+  const questionLimit = session?.questionLimit ?? 7;
+  const isRetry = (session?.rejected.length ?? 0) > 0;
 
   // GPS 위치 및 백엔드 통신용 상태값
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
@@ -126,6 +138,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setCurrentQuestion(null);
     setResults([]);
     setSelectedMenu(null);
+    setAdjustments({});
+    setWorldCupResults([]);
+    setEatenMenus([]);
     setRestaurantsList([]);
     setGameState('intro');
     refreshLocation();
@@ -197,23 +212,23 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
-  const finishAkinator = async (finalSession: RecommendSession) => {
-    setCurrentQuestion(null);
-    let adjustments: Record<string, number> = {};
-    if (isLoggedIn) {
-      try {
-        const res = await apiFetch(`/api/user/histories`);
-        if (res.ok) {
-          const data = await res.json();
-          adjustments = recentMealAdjustments(data.histories || []);
-        }
-      } catch (e) {
-        console.log("Failed to fetch history for recommendation adjustments", e);
+  const loadAdjustments = async (): Promise<Record<string, number>> => {
+    if (!isLoggedIn) return {};
+    try {
+      const res = await apiFetch(`/api/user/histories`);
+      if (res.ok) {
+        const data = await res.json();
+        return recentMealAdjustments(data.histories || []);
       }
+    } catch (e) {
+      console.log("Failed to fetch history for recommendation adjustments", e);
     }
+    return {};
+  };
 
-    const ranked = getResults(finalSession, QUESTIONS, adjustments);
+  const showResults = (ranked: RecommendResult[]) => {
     setResults(ranked);
+    setEatenMenus([]);
     setGameState('reveal');
     revealAnim.setValue(0);
     Animated.spring(revealAnim, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();
@@ -221,6 +236,42 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (ranked.length > 0) {
       onSelectMenu(ranked[0].item);
     }
+  };
+
+  const finishAkinator = async (finalSession: RecommendSession) => {
+    setCurrentQuestion(null);
+    // "틀렸어요" 뒤에는 처음 불러온 보정값을 그대로 쓴다
+    const adj = finalSession.rejected.length > 0 ? adjustments : await loadAdjustments();
+    setAdjustments(adj);
+    showResults(getResults(finalSession, QUESTIONS, adj));
+  };
+
+  // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
+  const handleReject = () => {
+    const top = results[0];
+    if (!session || !top || !canReject(session)) return;
+    const next = rejectTopResult(session, top.item.name);
+    setSession(next);
+    setSelectedMenu(null);
+    setRestaurantsList([]);
+
+    if (session.rejected.length >= 1) {
+      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE);
+      if (cup.length >= 2) {
+        setWorldCupResults(cup);
+        setGameState('worldcup');
+        return;
+      }
+    }
+    setResults([]);
+    setGameState('questioning');
+    goNext(next);
+  };
+
+  const handleWorldCupWinner = (menu: MenuItem) => {
+    const winner = worldCupResults.find(r => r.item.name === menu.name);
+    if (!winner) return;
+    showResults([winner, ...worldCupResults.filter(r => r !== winner)].slice(0, results.length || 3));
   };
 
   // 대안을 누르면 1위 자리로 올린다
@@ -231,7 +282,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     onSelectMenu(picked.item);
   };
 
+  // 메뉴를 빨리 바꾸면 이전 메뉴의 식당 응답이 늦게 올 수 있다. 가장 최근 요청의 결과만 쓴다
+  const restaurantRequestRef = useRef(0);
+
   const onSelectMenu = async (menu: MenuItem) => {
+    const requestId = ++restaurantRequestRef.current;
+    const isLatest = () => requestId === restaurantRequestRef.current;
     setSelectedMenu(menu);
     setLoadingRestaurants(true);
     setRestaurantsList([]);
@@ -244,14 +300,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       const response = await apiFetch(url);
       if (response.ok) {
         const data = await response.json();
-        setRestaurantsList(data.restaurants || []);
-      } else {
+        if (isLatest()) setRestaurantsList(data.restaurants || []);
+      } else if (isLatest()) {
         setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
       }
     } catch (error) {
-      setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
+      if (isLatest()) setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
     } finally {
-      setLoadingRestaurants(false);
+      if (isLatest()) setLoadingRestaurants(false);
     }
   };
 
@@ -279,22 +335,39 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     navigation.navigate("지도", { restaurant: res });
   };
 
-  const handleOpenBaemin = (menuName: string) => {
-    const query = encodeURIComponent(menuName);
-    const appUrl = `baemin://search?keyword=${query}`;
-    const webUrl = `https://m.baemin.com`;
-    
-    Linking.canOpenURL(appUrl)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(appUrl);
-        } else {
-          Linking.openURL(webUrl);
-        }
-      })
-      .catch(() => {
-        Linking.openURL(webUrl);
-      });
+  const handleOpenBaemin = async (menuName: string) => {
+    const opened = await openDelivery(menuName);
+    if (opened === 'failed') {
+      Alert.alert("배달 앱을 열지 못했어요", "배달의민족 앱이나 브라우저를 확인해 주세요.");
+    }
+  };
+
+  // "근처 식당" (US-20): 지도 탭에서 이 메뉴로 반경 1.5km 검색
+  const handleNearby = (menu: MenuItem) => {
+    navigation.navigate("지도", { keyword: menu.name, requestedAt: Date.now() });
+  };
+
+  // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다. 게스트 기록은 기기 저장소 연결(US-16) 뒤 같은 자리에서 저장
+  // 저장 중에 같은 메뉴를 한 번 더 눌러도 기록이 두 번 남지 않게 막는다 (다른 메뉴는 따로 저장)
+  const savingMenusRef = useRef(new Set<string>());
+  const handleEatThis = async (menu: MenuItem) => {
+    if (savingMenusRef.current.has(menu.name)) return;
+    savingMenusRef.current.add(menu.name);
+    try {
+      if (isLoggedIn) {
+        const res = await apiFetch(`/api/user/histories`, {
+          method: 'POST',
+          body: { menuName: menu.name, emoji: menu.emoji, category: menu.category }
+        });
+        if (!res.ok) throw new Error(`history save failed (${res.status})`);
+      }
+      setEatenMenus(prev => (prev.includes(menu.name) ? prev : [...prev, menu.name]));
+    } catch (e) {
+      console.log("Failed to save eaten history", e);
+      Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
+    } finally {
+      savingMenusRef.current.delete(menu.name);
+    }
   };
 
   const handleToggleFavorite = async () => {
@@ -391,14 +464,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           {/* Header Progress */}
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>질문 {questionNumber} / {MAX_QUESTIONS}</Text>
+              <Text style={styles.progressText}>질문 {questionNumber} / {questionLimit}</Text>
               <Text style={styles.poolCountText}>후보 메뉴 {session?.candidates.length ?? 0}개</Text>
             </View>
             <View style={styles.progressBarBackground}>
               <View 
                 style={[
                   styles.progressBarFill, 
-                  { width: `${(questionNumber / MAX_QUESTIONS) * 100}%` }
+                  { width: `${Math.min(questionNumber / questionLimit, 1) * 100}%` }
                 ]} 
               />
             </View>
@@ -437,6 +510,20 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         </View>
       )}
 
+      {/* 2-1. 두 번째 "틀렸어요": 남은 상위 4개로 월드컵 (US-15) */}
+      {gameState === 'worldcup' && worldCupResults.length >= 2 && (
+        <ScrollView contentContainerStyle={styles.revealContainer}>
+          <MiniWorldCup
+            menus={worldCupResults.map(r => r.item)}
+            title="메추리가 헷갈려요. 직접 골라 주세요!"
+            onWinner={handleWorldCupWinner}
+          />
+          <TouchableOpacity style={styles.resetButton} onPress={resetGame}>
+            <Text style={styles.resetButtonText}>처음으로 돌아가기</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
       {/* 3. 추천 결과 단계 */}
       {gameState === 'reveal' && (
         <ScrollView style={styles.scrollReveal} contentContainerStyle={styles.revealContainer} showsVerticalScrollIndicator={false}>
@@ -447,7 +534,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                 { opacity: revealAnim, transform: [{ scale: revealAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }
               ]}
             >
-              <Text style={styles.revealLead}>당신이 생각한 메뉴는…</Text>
+              <Text style={styles.revealLead}>{isRetry ? '그렇다면 이 메뉴는…' : '당신이 생각한 메뉴는…'}</Text>
               <Text style={styles.revealEmoji}>{results[0].item.emoji}</Text>
               <Text style={styles.revealName}>{results[0].item.name}!</Text>
               <View style={styles.reasonRow}>
@@ -457,6 +544,36 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                   </View>
                 ))}
               </View>
+
+              {/* 결과에서 바로 실행 (US-20) */}
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleNearby(results[0].item)}>
+                  <Text style={styles.actionIcon}>📍</Text>
+                  <Text style={styles.actionLabel}>근처 식당</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenBaemin(results[0].item.name)}>
+                  <Text style={styles.actionIcon}>🛵</Text>
+                  <Text style={styles.actionLabel}>배달</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionPrimary, eatenMenus.includes(results[0].item.name) && styles.actionDone]}
+                  onPress={() => handleEatThis(results[0].item)}
+                  disabled={eatenMenus.includes(results[0].item.name)}
+                >
+                  <Text style={styles.actionIcon}>😋</Text>
+                  <Text style={[styles.actionLabel, styles.actionPrimaryLabel]}>
+                    {eatenMenus.includes(results[0].item.name) ? '맛있게 드세요!' : '이거 먹을래요'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {session && canReject(session) && (
+                <TouchableOpacity style={styles.rejectButton} onPress={handleReject}>
+                  <Text style={styles.rejectButtonText}>
+                    {session.rejected.length >= 1 ? '또 틀렸어요, 월드컵으로 정할래요' : '틀렸어요 🙅'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </Animated.View>
           )}
 
@@ -561,6 +678,53 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 }
 
 const styles = StyleSheet.create({
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 18,
+    alignSelf: 'stretch',
+  },
+  actionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#fde7c0',
+  },
+  actionPrimary: {
+    flex: 1.4,
+    backgroundColor: '#F5A623',
+    borderColor: '#F5A623',
+  },
+  actionDone: {
+    backgroundColor: '#c9b48f',
+    borderColor: '#c9b48f',
+  },
+  actionIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  actionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3b2f1e',
+  },
+  actionPrimaryLabel: {
+    color: '#ffffff',
+  },
+  rejectButton: {
+    marginTop: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  rejectButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9a8a74',
+    textDecorationLine: 'underline',
+  },
   answerGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
