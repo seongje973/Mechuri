@@ -172,6 +172,61 @@ describe('RecommendScreen', () => {
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
 
+  it('이전 판의 저장이 새 판에서 늦게 끝나도 새 판의 먹을래요 버튼은 그대로다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
+    const playToReveal = async () => {
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+      }
+    };
+    await playToReveal();
+    let finishOld!: (v: unknown) => void;
+    apiFetch.mockImplementationOnce(() => new Promise(r => (finishOld = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await playToReveal();
+    await act(async () => {
+      finishOld({ ok: true, status: 201, json: async () => ({}) });
+    });
+    expect(screen.getByText('이거 먹을래요')).toBeTruthy();
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+  });
+
+  it('지도보기로 식당을 살펴보기만 하면 먹은 기록을 남기지 않는다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    apiFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ restaurants: [{ name: '진짜식당', distance: '350m', category: '한식', rating: 4.5, type: '식당', url: '', address: '서울', latitude: 37.5, longitude: 127 }], histories: [] }),
+    }));
+    const navigate = jest.fn();
+    render(<RecommendScreen navigation={{ navigate }} isLoggedIn userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    apiFetch.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('지도보기 ➔'));
+    });
+    expect(navigate).toHaveBeenCalledWith('지도', expect.objectContaining({ restaurant: expect.objectContaining({ name: '진짜식당' }) }));
+    expect(apiFetch.mock.calls.filter((c: any[]) => c[0] === '/api/user/histories')).toHaveLength(0);
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+  });
+
   it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
     const { apiFetch } = jest.requireMock('../../api/client');
     render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
