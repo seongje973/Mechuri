@@ -14,6 +14,7 @@ import {
   Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { KAKAO_CLIENT_ID, KAKAO_REDIRECT_URI } from '../constants/env';
 
 interface MyPageScreenProps {
   isLoggedIn: boolean;
@@ -74,8 +75,12 @@ export default function MyPageScreen({
   const handleRealKakaoLogin = async () => {
     setAuthLoading(true);
     try {
-      const client_id = "f9395e2d0bbfe79e277bdbeaaf6b568d"; 
-      const redirect_uri = encodeURIComponent("http://localhost:5000/api/auth/kakao/callback");
+      if (!KAKAO_CLIENT_ID) {
+        Alert.alert("환경 설정 필요", "EXPO_PUBLIC_KAKAO_CLIENT_ID가 설정되지 않았습니다.");
+        return;
+      }
+      const client_id = KAKAO_CLIENT_ID;
+      const redirect_uri = encodeURIComponent(KAKAO_REDIRECT_URI);
       
       // Let's pass the standard Expo development host '127.0.0.1:8081' as state 
       // If the developer is testing on real device, backend dynamically parses the state to redirect.
@@ -300,6 +305,7 @@ export default function MyPageScreen({
           await AsyncStorage.setItem('user_profile', JSON.stringify(updatedProfile));
           // We can refresh user statistics in state
           loadUserData();
+          onLoginSuccess();
           Alert.alert("필터 수정 완료 🐣", `기피 태그가 저장되었습니다: [${newTags.join(', ') || '없음'}]`);
         }
       } catch (e) {
@@ -312,12 +318,34 @@ export default function MyPageScreen({
       onPress: () => toggleTag(tag)
     }));
 
+    const showPage3 = () => {
+      Alert.alert(
+        "🚫 알레르기 및 기피 설정 (3/3)",
+        `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
+        [
+          ...buttons.slice(4, 5),
+          { text: "닫기", style: "cancel" }
+        ]
+      );
+    };
+
+    const showPage2 = () => {
+      Alert.alert(
+        "🚫 알레르기 및 기피 설정 (2/3)",
+        `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
+        [
+          ...buttons.slice(2, 4),
+          { text: "다음 ➔", onPress: showPage3 }
+        ]
+      );
+    };
+
     Alert.alert(
-      "🚫 알레르기 및 기피 설정",
+      "🚫 알레르기 및 기피 설정 (1/3)",
       `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
       [
-        ...buttons.slice(0, 3), // Show first 3 options (e.g. 매운맛, 오이, 가지)
-        { text: "닫기", style: "cancel" }
+        ...buttons.slice(0, 2),
+        { text: "다음 ➔", onPress: showPage2 }
       ]
     );
   };

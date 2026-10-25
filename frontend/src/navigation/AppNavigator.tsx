@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Import Screens
 import HomeScreen from '../screens/HomeScreen';
 import RecommendScreen from '../screens/RecommendScreen';
+import WorldCupScreen from '../screens/WorldCupScreen';
 import MapScreen from '../screens/MapScreen';
 import MyPageScreen from '../screens/MyPageScreen';
 
@@ -167,6 +168,15 @@ export default function AppNavigator() {
         }}
       >
         {props => <RecommendScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
+      </Tab.Screen>
+
+      <Tab.Screen 
+        name="월드컵" 
+        options={{
+          tabBarLabel: '🏆 월드컵',
+        }}
+      >
+        {props => <WorldCupScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
       </Tab.Screen>
       
       <Tab.Screen 

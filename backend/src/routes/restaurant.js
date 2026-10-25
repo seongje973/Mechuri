@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const { sequelize } = require('../config/db');
+const History = require('../models/History');
 require('dotenv').config();
 
 router.get('/', async (req, res) => {
@@ -121,6 +123,63 @@ router.get('/', async (req, res) => {
     count: mockRestaurants.length,
     restaurants: mockRestaurants
   });
+});
+
+// 실시간 인기 메뉴 TOP 5 통계 API
+router.get('/ranking', async (req, res) => {
+  try {
+    const ranking = await History.findAll({
+      attributes: [
+        'menuName',
+        'emoji',
+        'category',
+        [sequelize.fn('COUNT', sequelize.col('menuName')), 'count']
+      ],
+      group: ['menuName', 'emoji', 'category'],
+      order: [[sequelize.literal('count'), 'DESC']],
+      limit: 5
+    });
+    
+    // Sequelize 결과 포맷 정제
+    const formattedRanking = ranking.map((item, idx) => {
+      const data = item.get({ plain: true });
+      return {
+        rank: idx + 1,
+        menuName: data.menuName,
+        emoji: data.emoji,
+        category: data.category,
+        count: parseInt(data.count, 10) || 0
+      };
+    });
+
+    // 만약 데이터베이스에 쌓인 히스토리가 하나도 없다면 폴백 데이터 노출
+    if (formattedRanking.length === 0) {
+      throw new Error('No history logs in Database yet.');
+    }
+
+    return res.json({
+      success: true,
+      source: 'Database Live Statistics',
+      ranking: formattedRanking
+    });
+  } catch (error) {
+    console.log('⚠️ Ranking API Fallback Triggered:', error.message);
+    
+    // DB 데이터가 없거나 서버 에러 시 폴백용 고품질 트렌드 데이터 전송
+    const fallbackRanking = [
+      { rank: 1, menuName: '삼겹살', emoji: '🥩', category: '한식', count: 18 },
+      { rank: 2, menuName: '짜장면', emoji: '🍜', category: '중식', count: 14 },
+      { rank: 3, menuName: '돈까스', emoji: '🍛', category: '일식', count: 11 },
+      { rank: 4, menuName: '초밥', emoji: '🍣', category: '일식', count: 9 },
+      { rank: 5, menuName: '피자', emoji: '🍕', category: '양식', count: 6 }
+    ];
+
+    return res.json({
+      success: true,
+      source: 'Mock Fallback Data',
+      ranking: fallbackRanking
+    });
+  }
 });
 
 module.exports = router;

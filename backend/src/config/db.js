@@ -7,8 +7,8 @@ const sequelize = new Sequelize(
   process.env.DB_PASSWORD,
   {
     host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    dialect: 'mysql',
+    port: process.env.DB_PORT || 5432,
+    dialect: 'postgres',
     logging: false, // console log SQL queries
     pool: {
       max: 5,
@@ -22,11 +22,11 @@ const sequelize = new Sequelize(
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✅ MySQL Database connected successfully with Sequelize.');
+    console.log('✅ PostgreSQL Database connected successfully with Sequelize.');
   } catch (error) {
-    console.error('❌ Unable to connect to the MySQL database:');
+    console.error('❌ Unable to connect to the PostgreSQL database:');
     console.error(error.message);
-    console.log('👉 Tip: Please make sure your MySQL server is running and .env configuration is correct.');
+    console.log('👉 Tip: Please make sure your PostgreSQL server is running and .env configuration is correct.');
   }
 };
 

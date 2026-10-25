@@ -14,6 +14,7 @@ import {
   Linking 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { KAKAO_CLIENT_ID, KAKAO_REDIRECT_URI } from '../constants/env';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -149,8 +150,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           onPress: async () => {
             setLoading(true);
             try {
-              const client_id = "f9395e2d0bbfe79e277bdbeaaf6b568d"; 
-              const redirect_uri = encodeURIComponent("http://localhost:5000/api/auth/kakao/callback");
+              if (!KAKAO_CLIENT_ID) {
+                Alert.alert("환경 설정 필요", "EXPO_PUBLIC_KAKAO_CLIENT_ID가 설정되지 않았습니다.");
+                return;
+              }
+              const client_id = KAKAO_CLIENT_ID;
+              const redirect_uri = encodeURIComponent(KAKAO_REDIRECT_URI);
               const authUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code`;
               
               console.log("🌐 Opening Kakao OAuth Login URL in browser...");

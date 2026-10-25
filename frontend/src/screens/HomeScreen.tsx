@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
   View, 
   TouchableOpacity, 
   ScrollView, 
-  SafeAreaView, 
-  Platform 
+  Platform,
+  ActivityIndicator
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface HomeScreenProps {
   navigation: any;
@@ -15,7 +16,51 @@ interface HomeScreenProps {
   userProfile: any;
 }
 
+interface RankingItem {
+  rank: number;
+  menuName: string;
+  emoji: string;
+  category: string;
+  count: number;
+}
+
 export default function HomeScreen({ navigation, isLoggedIn, userProfile }: HomeScreenProps) {
+  const insets = useSafeAreaInsets();
+  const [rankingList, setRankingList] = useState<RankingItem[]>([]);
+  const [loadingRanking, setLoadingRanking] = useState<boolean>(true);
+
+  // 랭킹 정보 조회
+  const fetchRanking = async () => {
+    try {
+      setLoadingRanking(true);
+      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+      const response = await fetch(`http://${ip}:5000/api/restaurants/ranking`);
+      if (response.ok) {
+        const data = await response.json();
+        setRankingList(data.ranking || []);
+      } else {
+        setRankingList(getFallbackRanking());
+      }
+    } catch (e) {
+      console.log('⚠️ Failed to fetch ranking from server, applying client fallback');
+      setRankingList(getFallbackRanking());
+    } finally {
+      setLoadingRanking(false);
+    }
+  };
+
+  const getFallbackRanking = (): RankingItem[] => [
+    { rank: 1, menuName: '삼겹살', emoji: '🥩', category: '한식', count: 18 },
+    { rank: 2, menuName: '짜장면', emoji: '🍜', category: '중식', count: 14 },
+    { rank: 3, menuName: '돈까스', emoji: '🍛', category: '일식', count: 11 },
+    { rank: 4, menuName: '초밥', emoji: '🍣', category: '일식', count: 9 },
+    { rank: 5, menuName: '피자', emoji: '🍕', category: '양식', count: 6 }
+  ];
+
+  useEffect(() => {
+    fetchRanking();
+  }, []);
+
   // Simple check for time of day to display dynamic greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -26,8 +71,14 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={[styles.mainContainer, { paddingTop: insets.top }]}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.container, 
+          { paddingBottom: insets.bottom + 20 }
+        ]} 
+        showsVerticalScrollIndicator={false}
+      >
         
         {/* Header */}
         <View style={styles.header}>
@@ -58,6 +109,57 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
           >
             <Text style={styles.bannerButtonText}>추천 메뉴 더 보기</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Section: Real-time Ranking Board */}
+        <View style={styles.rankingSection}>
+          <View style={styles.rankingHeaderRow}>
+            <Text style={styles.sectionTitle}>🔥 실시간 인기 메뉴 TOP 5</Text>
+            <TouchableOpacity onPress={fetchRanking} style={styles.refreshBtn}>
+              <Text style={styles.refreshBtnText}>새로고침 🔄</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.rankingCard}>
+            {loadingRanking ? (
+              <View style={styles.rankingLoading}>
+                <ActivityIndicator size="small" color="#fbbf24" />
+                <Text style={styles.rankingLoadingText}>실시간 랭킹 집계 중...</Text>
+              </View>
+            ) : (
+              rankingList.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.rankingRow,
+                    idx !== rankingList.length - 1 && styles.rankingBorder
+                  ]}
+                  onPress={() => navigation.navigate('메뉴 추천')}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.rankBadgeRow}>
+                    <Text style={[
+                      styles.rankNumber,
+                      item.rank === 1 && styles.rankGold,
+                      item.rank === 2 && styles.rankSilver,
+                      item.rank === 3 && styles.rankBronze,
+                    ]}>
+                      {item.rank === 1 ? '👑 1' : `${item.rank}`}
+                    </Text>
+                    <Text style={styles.rankMenuEmoji}>{item.emoji}</Text>
+                    <View style={styles.rankMenuInfo}>
+                      <Text style={styles.rankMenuName}>{item.menuName}</Text>
+                      <Text style={styles.rankMenuCategory}>{item.category}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.rankCountWrapper}>
+                    <Text style={styles.rankCountText}>{item.count}회 선택됨</Text>
+                    <Text style={styles.rankArrow}>➔</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
         </View>
 
         {/* Section: Core Features */}
@@ -151,18 +253,18 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
 
         <Text style={styles.footer}>MeChuri - premium food recommendation app</Text>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  mainContainer: {
     flex: 1,
     backgroundColor: '#1c1917', // Warm Dark Stone Onyx (따뜻한 블랙/돌색)
   },
   container: {
-    padding: 20,
-    paddingTop: Platform.OS === 'android' ? 20 : 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
   header: {
     flexDirection: 'row',
@@ -393,5 +495,110 @@ const styles = StyleSheet.create({
     color: '#1c1917',
     fontSize: 11.5,
     fontWeight: '800',
+  },
+  // Ranking Section Styles
+  rankingSection: {
+    marginBottom: 32,
+  },
+  rankingHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  refreshBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  refreshBtnText: {
+    color: '#a8a29e',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  rankingCard: {
+    backgroundColor: 'rgba(41, 37, 36, 0.75)',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  rankingLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+  },
+  rankingLoadingText: {
+    color: '#a8a29e',
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  rankingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  rankingBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  rankBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  rankNumber: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#a8a29e',
+    width: 38,
+    textAlign: 'center',
+  },
+  rankGold: {
+    color: '#fbbf24', // Gold
+  },
+  rankSilver: {
+    color: '#e2e8f0', // Silver
+  },
+  rankBronze: {
+    color: '#b45309', // Bronze
+  },
+  rankMenuEmoji: {
+    fontSize: 24,
+    marginHorizontal: 10,
+  },
+  rankMenuInfo: {
+    justifyContent: 'center',
+  },
+  rankMenuName: {
+    color: '#f8fafc',
+    fontSize: 14.5,
+    fontWeight: '800',
+  },
+  rankMenuCategory: {
+    color: '#78716c',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  rankCountWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rankCountText: {
+    color: '#a8a29e',
+    fontSize: 11.5,
+    marginRight: 8,
+  },
+  rankArrow: {
+    color: '#57534e',
+    fontSize: 12,
   }
 });

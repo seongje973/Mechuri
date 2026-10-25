@@ -2,16 +2,17 @@ version: '3.8'
 
 services:
   db:
-    image: mysql:8.0
-    container_name: mechuri_mysql
+    image: postgres:15-alpine
+    container_name: mechuri_postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: mechuri_password
-      MYSQL_DATABASE: mechuri_db
+      POSTGRES_DB: mechuri_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mechuri_password
     ports:
-      - '3306:3306'
+      - '5432:5432'
     volumes:
-      - mysql_data:/var/lib/mysql
+      - pg_data:/var/lib/postgresql/data
 
 volumes:
-  mysql_data:
+  pg_data:

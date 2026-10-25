@@ -4,7 +4,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mechuri_secret_key_2026_qquail';
+const JWT_SECRET = process.env.JWT_SECRET;
+const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
+const KAKAO_REDIRECT_URI = process.env.KAKAO_REDIRECT_URI || 'http://localhost:5000/api/auth/kakao/callback';
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required.');
+}
 
 // JWT Verification Middleware
 const authMiddleware = async (req, res, next) => {
@@ -137,12 +143,13 @@ const axios = require('axios');
 
 router.get('/kakao/callback', async (req, res) => {
   const { code, state } = req.query;
-  const apiKey = process.env.KAKAO_REST_API_KEY;
-  const redirectUri = `http://localhost:5000/api/auth/kakao/callback`;
   const hostUri = state ? decodeURIComponent(state) : '127.0.0.1:8081';
 
   if (!code) {
     return res.status(400).send('Authorization code is missing.');
+  }
+  if (!KAKAO_REST_API_KEY) {
+    return res.status(500).send('KAKAO_REST_API_KEY is not configured on the server.');
   }
 
   try {
@@ -151,8 +158,8 @@ router.get('/kakao/callback', async (req, res) => {
     const tokenResponse = await axios.post('https://kauth.kakao.com/oauth/token', null, {
       params: {
         grant_type: 'authorization_code',
-        client_id: apiKey,
-        redirect_uri: redirectUri,
+        client_id: KAKAO_REST_API_KEY,
+        redirect_uri: KAKAO_REDIRECT_URI,
         code
       },
       headers: {

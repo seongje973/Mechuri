@@ -21,10 +21,13 @@ app.use(express.urlencoded({ extended: true }));
 const initDatabase = async () => {
   await connectDB();
   try {
-    await sequelize.sync({ alter: true });
-    console.log('🔄 MySQL Database tables synchronized successfully.');
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    await sequelize.sync(isDevelopment ? { alter: true } : undefined);
+    console.log(
+      `🔄 Database tables synchronized successfully. (alter mode: ${isDevelopment ? 'on' : 'off'})`
+    );
   } catch (error) {
-    console.error('❌ Failed to sync MySQL database tables:', error.message);
+    console.error('❌ Failed to sync database tables:', error.message);
   }
 };
 initDatabase();
