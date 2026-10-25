@@ -8,6 +8,8 @@ const { sequelize, connectDB } = require('./config/db');
 const User = require('./models/User');
 const Favorite = require('./models/Favorite');
 const History = require('./models/History');
+const Room = require('./models/Room');
+const Participant = require('./models/Participant');
 const Event = require('./models/Event');
 
 const app = express();
@@ -46,13 +48,18 @@ app.get('/', (req, res) => {
 const { router: authRouter } = require('./routes/auth');
 const userRouter = require('./routes/user');
 const restaurantRouter = require('./routes/restaurant');
+const roomsRouter = require('./routes/rooms');
+const { attachRealtime } = require('./realtime');
 
 app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
 app.use('/api/restaurants', restaurantRouter);
+app.use('/api/rooms', roomsRouter);
 app.use('/api/events', require('./routes/events').createEventsRouter({ Event }));
 
 // Start Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
+// 같이 정하기 실시간 진행 (Socket.IO는 같은 포트를 쓴다)
+attachRealtime(server);
