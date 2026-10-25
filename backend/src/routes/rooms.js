@@ -82,6 +82,8 @@ router.post('/', async (req, res) => {
       let code = null;
       for (let i = 0; i < CODE_ATTEMPTS && !code; i++) {
         const candidate = generateRoomCode();
+        // 같은 코드를 동시에 고르는 두 요청이 둘 다 통과하지 않게 (코드에 unique 제약이 없어서)
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:code))', { replacements: { code: candidate }, transaction });
         if (!(await findLiveRoom(candidate, { transaction }))) code = candidate;
       }
       if (!code) throw new Error('Could not allocate a room code.');
