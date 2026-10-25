@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Dimensions
 } from 'react-native';
+import { apiFetch } from '../api/client';
 import * as Location from 'expo-location';
 import MapView, { Marker, Callout } from 'react-native-maps';
 
@@ -94,11 +95,10 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
       }
 
       // Fetch nearby eateries
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      const url = `http://${ip}:5000/api/restaurants?keyword=${encodeURIComponent('맛집')}&x=${lng}&y=${lat}`;
+      const url = `/api/restaurants?keyword=${encodeURIComponent('맛집')}&x=${lng}&y=${lat}`;
       console.log('📡 Fetching maps data:', url);
 
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (response.ok) {
         const data = await response.json();
         setRestaurantsList(data.restaurants || []);

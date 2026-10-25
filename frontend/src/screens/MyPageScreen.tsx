@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
   Linking
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, getAuthToken, saveSession, saveProfile, DEV_SERVER_HOST } from '../api/client';
 import { KAKAO_CLIENT_ID, KAKAO_REDIRECT_URI } from '../constants/env';
 
 interface MyPageScreenProps {
@@ -51,15 +51,10 @@ export default function MyPageScreen({
   const loadUserData = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      if (!token) return;
+      if (!(await getAuthToken())) return;
 
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      
       // Fetch live stats
-      const statsRes = await fetch(`http://${ip}:5000/api/user/stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const statsRes = await apiFetch(`/api/user/stats`);
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData);
@@ -82,10 +77,8 @@ export default function MyPageScreen({
       const client_id = KAKAO_CLIENT_ID;
       const redirect_uri = encodeURIComponent(KAKAO_REDIRECT_URI);
       
-      // Let's pass the standard Expo development host '127.0.0.1:8081' as state 
-      // If the developer is testing on real device, backend dynamically parses the state to redirect.
-      const devHost = Platform.OS === 'android' ? '10.0.2.2:8081' : '127.0.0.1:8081';
-      const stateParam = encodeURIComponent(devHost);
+      // Expo 개발 서버 주소를 state로 넘기면 서버가 로그인 후 exp://<주소>로 앱을 다시 연다 (실기기 포함)
+      const stateParam = encodeURIComponent(DEV_SERVER_HOST);
       
       const authUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&state=${stateParam}`;
       
@@ -112,14 +105,12 @@ export default function MyPageScreen({
     const timeoutId = setTimeout(() => controller.abort(), 3000);
 
     try {
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      const url = `http://${ip}:5000/api/auth/kakao/mobile`;
+      const url = `/api/auth/kakao/mobile`;
 
-      console.log("📡 Synching simulated Kakao profile to backend MySQL...");
-      const response = await fetch(url, {
+      console.log("📡 Synching simulated Kakao profile to backend...");
+      const response = await apiFetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mockProfile),
+        body: mockProfile,
         signal: controller.signal
       });
 
@@ -127,25 +118,17 @@ export default function MyPageScreen({
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('auth_token', data.token);
-        await AsyncStorage.setItem('user_profile', JSON.stringify(data.user));
+        await saveSession(data.token, data.user);
         console.log("✅ Kakao simulated auth sync succeeded!");
         onLoginSuccess();
       } else {
         throw new Error(data.error);
       }
     } catch (error) {
-      console.log("⚠️ Simulated Kakao sync failed. Falling back to offline local Kakao mode.");
+      // 서버가 받아주지 않는 가짜 토큰을 저장하면 이후 모든 요청이 401이 되므로, 실패하면 비로그인 상태로 둔다.
+      console.log("⚠️ Simulated Kakao sync failed:", error);
       clearTimeout(timeoutId);
-
-      await AsyncStorage.setItem('auth_token', 'local_kakao_token_session_2026');
-      await AsyncStorage.setItem('user_profile', JSON.stringify({
-        id: randomId,
-        email: mockProfile.email,
-        nickname: mockProfile.nickname,
-        avoidTags: ''
-      }));
-      onLoginSuccess();
+      Alert.alert("연결 실패 📡", "서버에 연결하지 못했습니다. 로그인 없이도 추천은 그대로 쓸 수 있어요.");
     } finally {
       setAuthLoading(false);
     }
@@ -168,9 +151,8 @@ export default function MyPageScreen({
     const timeoutId = setTimeout(() => controller.abort(), 3000);
 
     try {
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const endpoint = isLoginMode ? 'login' : 'register';
-      const url = `http://${ip}:5000/api/auth/${endpoint}`;
+      const url = `/api/auth/${endpoint}`;
 
       console.log(`📡 Sending auth request to: ${url}`);
 
@@ -178,10 +160,9 @@ export default function MyPageScreen({
         ? { email, password }
         : { email, password, nickname };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyData),
+        body: bodyData,
         signal: controller.signal
       });
 
@@ -189,8 +170,7 @@ export default function MyPageScreen({
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('auth_token', data.token);
-        await AsyncStorage.setItem('user_profile', JSON.stringify(data.user));
+        await saveSession(data.token, data.user);
         console.log("✅ Email Authenticated successfully!");
         onLoginSuccess();
       } else {
@@ -223,12 +203,7 @@ export default function MyPageScreen({
 
   const handlePressFavorite = async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-      const res = await fetch(`http://${ip}:5000/api/user/favorites`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await apiFetch(`/api/user/favorites`);
       
       if (!res.ok) throw new Error("Fetch failed");
       const data = await res.json();
@@ -253,13 +228,9 @@ export default function MyPageScreen({
               ];
               const randomFood = sampleFoods[Math.floor(Math.random() * sampleFoods.length)];
               
-              await fetch(`http://${ip}:5000/api/user/favorites`, {
+              await apiFetch(`/api/user/favorites`, {
                 method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(randomFood)
+                body: randomFood
               });
               loadUserData();
             }
@@ -287,22 +258,15 @@ export default function MyPageScreen({
       
       const updatedString = newTags.join(',');
       try {
-        const token = await AsyncStorage.getItem('auth_token');
-        const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-        const res = await fetch(`http://${ip}:5000/api/user/avoid-tags`, {
+        const res = await apiFetch(`/api/user/avoid-tags`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ avoidTags: updatedString })
+          body: { avoidTags: updatedString }
         });
         
         if (res.ok) {
           // Update cached profile
           const updatedProfile = { ...userProfile, avoidTags: updatedString };
-          await AsyncStorage.setItem('user_profile', JSON.stringify(updatedProfile));
+          await saveProfile(updatedProfile);
           // We can refresh user statistics in state
           loadUserData();
           onLoginSuccess();
@@ -352,12 +316,7 @@ export default function MyPageScreen({
 
   const handlePressHistory = async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-      const res = await fetch(`http://${ip}:5000/api/user/histories`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await apiFetch(`/api/user/histories`);
       
       if (!res.ok) throw new Error("Fetch failed");
       const data = await res.json();
@@ -379,9 +338,8 @@ export default function MyPageScreen({
             text: "전체 삭제",
             style: "destructive",
             onPress: async () => {
-              await fetch(`http://${ip}:5000/api/user/histories`, {
+              await apiFetch(`/api/user/histories`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
               });
               loadUserData();
               Alert.alert("완료", "식사 기록이 완전히 비워졌습니다 🐣");
@@ -428,16 +386,18 @@ export default function MyPageScreen({
                 <Text style={styles.kakaoBtnText}>💛 카카오 계정으로 로그인</Text>
               </TouchableOpacity>
 
-              {/* Development Quick Bypass Link */}
-              <TouchableOpacity 
-                style={styles.devBypassBtn}
-                onPress={handleSimulatedKakaoSync}
-                disabled={authLoading}
-              >
-                <Text style={styles.devBypassText}>
-                  브라우저 연결에 문제가 있나요? 간편 동기화로 시작하기 ➔
-                </Text>
-              </TouchableOpacity>
+              {/* Development Quick Bypass Link (개발 빌드에서만 보임, 서버도 운영에서는 막음) */}
+              {__DEV__ && (
+                <TouchableOpacity 
+                  style={styles.devBypassBtn}
+                  onPress={handleSimulatedKakaoSync}
+                  disabled={authLoading}
+                >
+                  <Text style={styles.devBypassText}>
+                    브라우저 연결에 문제가 있나요? 간편 동기화로 시작하기 ➔
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* Accordion Email Auth Trigger */}
               <TouchableOpacity 

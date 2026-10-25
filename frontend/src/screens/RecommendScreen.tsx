@@ -13,12 +13,23 @@ import {
   Alert
 } from 'react-native';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, getStoredProfile } from '../api/client';
 import { MenuItem, MENU_DATA } from '../constants/menuData';
 
 const { width } = Dimensions.get('window');
 
 import { MenuProperty, AKINATOR_PROPERTIES } from '../constants/akinatorQuestions';
+import {
+  Answer,
+  MAX_QUESTIONS,
+  RecentMeal,
+  applyAnswer,
+  buildInitialPool,
+  parseAvoidTags,
+  pickNextQuestion,
+  rankResults,
+  shouldStop
+} from '../engine/filterEngine';
 
 interface Restaurant {
   name: string;
@@ -52,11 +63,9 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
   
   // 아키네이터 연동 핵심 상태값들
   const [pool, setPool] = useState<MenuItem[]>(MENU_DATA);
-  const [prevPool, setPrevPool] = useState<MenuItem[]>(MENU_DATA); // 모순적 답변으로 전멸할 때의 복구용
   const [askedQuestionIds, setAskedQuestionIds] = useState<string[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<MenuProperty | null>(null);
   const [questionCount, setQuestionCount] = useState<number>(0);
-  const maxQuestions = 12; // 최대 12개 질문 한계
 
   const [matchingResults, setMatchingResults] = useState<MenuItem[]>([]);
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
@@ -90,7 +99,6 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
   const resetGame = () => {
     setExcludedCategories([]);
     setPool(MENU_DATA);
-    setPrevPool(MENU_DATA);
     setAskedQuestionIds([]);
     setCurrentQuestion(null);
     setQuestionCount(0);
@@ -129,34 +137,16 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
 
   // 아키네이터 게임 기동
   const startAkinator = async () => {
-    let initialPool = MENU_DATA;
-
-    // 1. 사전 기피 장르 필터 차단 적용
-    if (excludedCategories.length > 0) {
-      initialPool = initialPool.filter(item => !excludedCategories.includes(item.category));
-    }
-
-    // 2. 마이페이지에서 설정한 기피 성분(avoidTags) 사전 영구 차단
+    // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags) 차단
+    let avoidTags: string[] = [];
     try {
-      const profileStr = await AsyncStorage.getItem('user_profile');
-      if (profileStr) {
-        const profile = JSON.parse(profileStr);
-        const avoidTags: string[] = profile.avoidTags ? profile.avoidTags.split(',').filter(Boolean) : [];
-        
-        if (avoidTags.length > 0) {
-          console.log("🚫 Akinator Pre-filtering avoid tags:", avoidTags);
-          const filtered = initialPool.filter(item => {
-            const hasAvoidTag = item.tags.some(tag => avoidTags.includes(tag));
-            return !hasAvoidTag;
-          });
-          if (filtered.length > 0) {
-            initialPool = filtered;
-          }
-        }
-      }
+      const profile = await getStoredProfile();
+      avoidTags = parseAvoidTags(profile?.avoidTags);
+      if (avoidTags.length > 0) console.log("🚫 Akinator Pre-filtering avoid tags:", avoidTags);
     } catch (e) {
       console.log("Failed to load user avoid tags on setup", e);
     }
+    const initialPool = buildInitialPool(MENU_DATA, excludedCategories, avoidTags);
 
     if (initialPool.length === 0) {
       Alert.alert("경고 ⚠️", "모든 메뉴 카테고리를 제외하셨습니다. 최소 한 개 이상의 종류를 남겨두세요.");
@@ -164,7 +154,6 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
     }
 
     setPool(initialPool);
-    setPrevPool(initialPool);
     setAskedQuestionIds([]);
     setQuestionCount(0);
     setGameState('questioning');
@@ -173,34 +162,11 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
     determineNextQuestion(initialPool, []);
   };
 
-  // 엔트로피(지니 불순도 편차 최소화) 기반 실시간 다음 최적 질문 선정
+  // 예/아니오가 가장 반반으로 나뉘는 다음 질문 선정
   const determineNextQuestion = (currentPool: MenuItem[], askedIds: string[]) => {
-    // 묻지 않은 질문들 추려내기
-    const remainingProps = AKINATOR_PROPERTIES.filter(prop => !askedIds.includes(prop.id));
-    
-    if (remainingProps.length === 0 || currentPool.length <= 1) {
-      finishAkinator(currentPool);
-      return;
-    }
-
-    // 남은 질문별로 '예' / '아니오'로 나뉘는 불균형 편차 연산
-    let bestProp: MenuProperty | null = null;
-    let minDeviation = Infinity;
-
-    remainingProps.forEach(prop => {
-      const yesCount = currentPool.filter(item => prop.check(item)).length;
-      const noCount = currentPool.length - yesCount;
-      const deviation = Math.abs(yesCount - noCount);
-
-      // 예/아니오 비율이 가장 50:50에 근접한 속성 낙점 (편차가 가장 최소인 질문)
-      if (deviation < minDeviation) {
-        minDeviation = deviation;
-        bestProp = prop;
-      }
-    });
-
-    if (bestProp) {
-      setCurrentQuestion(bestProp);
+    const nextQuestion = pickNextQuestion(currentPool, AKINATOR_PROPERTIES, askedIds);
+    if (nextQuestion) {
+      setCurrentQuestion(nextQuestion);
       setQuestionCount(prev => prev + 1);
     } else {
       finishAkinator(currentPool);
@@ -208,29 +174,15 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
   };
 
   // 아키네이터 답변 접수 및 동적 연산 처리
-  const handleAnswer = (answerType: 'yes' | 'no' | 'dontknow') => {
+  const handleAnswer = (answerType: Answer) => {
     if (!currentQuestion) return;
 
-    let newPool = [...pool];
-    setPrevPool(pool); // 롤백 대비 백업 저장
-
-    if (answerType === 'yes') {
-      newPool = pool.filter(item => currentQuestion.check(item));
-    } else if (answerType === 'no') {
-      newPool = pool.filter(item => !currentQuestion.check(item));
-    }
-
-    // 답변으로 인해 모든 풀이 완전히 전멸했을 시, 복구용으로 직전 상태(prevPool) 적용
-    if (newPool.length === 0) {
-      newPool = [...pool];
-    }
-
+    const newPool = applyAnswer(pool, currentQuestion, answerType);
     const nextAskedIds = [...askedQuestionIds, currentQuestion.id];
     setAskedQuestionIds(nextAskedIds);
     setPool(newPool);
 
-    // 탈출 조건 체크: 후보가 3개 이하이거나 최대 한계 질문 수 도달 시 결과 오픈
-    if (newPool.length <= 3 || questionCount >= maxQuestions) {
+    if (shouldStop(newPool, questionCount)) {
       finishAkinator(newPool);
     } else {
       determineNextQuestion(newPool, nextAskedIds);
@@ -240,55 +192,23 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
   // 최종 채점 및 랭킹 정렬 및 겹침 회피 적용
   const finishAkinator = async (finalPool: MenuItem[]) => {
     setGameState('reveal');
-    let rankedPool = finalPool.length > 0 ? finalPool : (pool.length > 0 ? pool : MENU_DATA);
+    const rankedPool = finalPool.length > 0 ? finalPool : (pool.length > 0 ? pool : MENU_DATA);
 
-    // 1. 최근 먹은 식사 히스토리를 대조하여 겹침(Conflict) 방지 패널티 삭감
-    let recentHistoryNames: string[] = [];
-    let recentHistoryCategories: string[] = [];
-
+    // 최근 식사 히스토리로 겹침 방지 감점
+    let recentMeals: RecentMeal[] = [];
     if (isLoggedIn) {
       try {
-        const token = await AsyncStorage.getItem('auth_token');
-        const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-        const res = await fetch(`http://${ip}:5000/api/user/histories`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiFetch(`/api/user/histories`);
         if (res.ok) {
           const data = await res.json();
-          const histories = data.histories || [];
-          
-          // 최근 5개 이력 추출
-          histories.slice(0, 5).forEach((h: any) => {
-            recentHistoryNames.push(h.menuName);
-            recentHistoryCategories.push(h.category);
-          });
+          recentMeals = data.histories || [];
         }
       } catch (e) {
         console.log("Failed to fetch history for Akinator scoring calculation", e);
       }
     }
 
-    // 2. 가중치 점수 채점 (기본 100점)
-    const scoredList = rankedPool.map(item => {
-      let score = 100;
-
-      // 최근 먹은 이름과 정확히 같으면 큰 패널티 (-20점)
-      if (recentHistoryNames.includes(item.name)) {
-        score -= 20;
-        console.log(`🚨 Recent food penalty -20 applied to: ${item.name}`);
-      }
-
-      // 최근 먹은 음식 종류와 카테고리가 일치하면 소규모 감점 (-5점)
-      if (recentHistoryCategories.includes(item.category)) {
-        score -= 5;
-        console.log(`🚨 Category overlap penalty -5 applied to: ${item.name}`);
-      }
-
-      return { item, score };
-    });
-
-    // 3. 점수가 높은 순으로 내림차순 정렬 후 최종 matchingResults에 탑재
-    const sorted = scoredList.sort((a, b) => b.score - a.score).map(x => x.item);
+    const sorted = rankResults(rankedPool, recentMeals);
     setMatchingResults(sorted);
     
     if (sorted.length > 0) {
@@ -302,12 +222,11 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
     setRestaurantsList([]);
 
     try {
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const lat = userCoords?.latitude || '37.497942';
       const lng = userCoords?.longitude || '127.0276197';
-      const url = `http://${ip}:5000/api/restaurants?keyword=${encodeURIComponent(menu.name)}&x=${lng}&y=${lat}`;
+      const url = `/api/restaurants?keyword=${encodeURIComponent(menu.name)}&x=${lng}&y=${lat}`;
 
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (response.ok) {
         const data = await response.json();
         setRestaurantsList(data.restaurants || []);
@@ -326,22 +245,15 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
 
     if (isLoggedIn) {
       try {
-        const token = await AsyncStorage.getItem('auth_token');
-        const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
         console.log(`📅 Logging history: Eaten ${selectedMenu.name} at ${res.name}`);
-        await fetch(`http://${ip}:5000/api/user/histories`, {
+        await apiFetch(`/api/user/histories`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
+          body: {
             menuName: selectedMenu.name,
             emoji: selectedMenu.emoji,
             restaurantName: res.name,
             category: selectedMenu.category
-          })
+          }
         });
       } catch (e) {
         console.log("Failed to sync eaten history to backend database", e);
@@ -386,21 +298,14 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
     }
 
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
       console.log(`❤️ Toggling favorite for: ${selectedMenu.name}`);
-      const res = await fetch(`http://${ip}:5000/api/user/favorites`, {
+      const res = await apiFetch(`/api/user/favorites`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+        body: {
           menuName: selectedMenu.name,
           emoji: selectedMenu.emoji,
           category: selectedMenu.category
-        })
+        }
       });
       if (res.ok) {
         Alert.alert("등록 성공 🐣", `[${selectedMenu.name}]이 최애 음식 리스트에 영구 보관되었습니다! 내 정보 탭에서 확인해 보세요.`);
@@ -471,14 +376,14 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
           {/* Header Progress */}
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>질문 {questionCount} / {maxQuestions}</Text>
+              <Text style={styles.progressText}>질문 {questionCount} / {MAX_QUESTIONS}</Text>
               <Text style={styles.poolCountText}>남은 메뉴 후보: {pool.length}개</Text>
             </View>
             <View style={styles.progressBarBackground}>
               <View 
                 style={[
                   styles.progressBarFill, 
-                  { width: `${(questionCount / maxQuestions) * 100}%` }
+                  { width: `${(questionCount / MAX_QUESTIONS) * 100}%` }
                 ]} 
               />
             </View>

@@ -13,7 +13,7 @@ import {
   Alert
 } from 'react-native';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch } from '../api/client';
 import { MenuItem, MENU_DATA } from '../constants/menuData';
 
 const { width } = Dimensions.get('window');
@@ -138,12 +138,11 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
     // 1. 주변 식당 목록 API 호출
     try {
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       const lat = userCoords?.latitude || '37.497942';
       const lng = userCoords?.longitude || '127.0276197';
-      const url = `http://${ip}:5000/api/restaurants?keyword=${encodeURIComponent(winner.name)}&x=${lng}&y=${lat}`;
+      const url = `/api/restaurants?keyword=${encodeURIComponent(winner.name)}&x=${lng}&y=${lat}`;
 
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (response.ok) {
         const data = await response.json();
         setRestaurantsList(data.restaurants || []);
@@ -159,22 +158,15 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
     // 2. 로그인 상태일 경우 백엔드 History에 우승 메뉴 저장
     if (isLoggedIn) {
       try {
-        const token = await AsyncStorage.getItem('auth_token');
-        const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-        
         console.log(`🏆 Logging WorldCup winner: ${winner.name}`);
-        await fetch(`http://${ip}:5000/api/user/histories`, {
+        await apiFetch(`/api/user/histories`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
+          body: {
             menuName: winner.name,
             emoji: winner.emoji,
             restaurantName: '이상형 월드컵 우승',
             category: winner.category
-          })
+          }
         });
       } catch (e) {
         console.log("Failed to sync WorldCup winner history to backend", e);
@@ -224,20 +216,13 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
     }
 
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-
-      const res = await fetch(`http://${ip}:5000/api/user/favorites`, {
+      const res = await apiFetch(`/api/user/favorites`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+        body: {
           menuName: winnerMenu.name,
           emoji: winnerMenu.emoji,
           category: winnerMenu.category
-        })
+        }
       });
       if (res.ok) {
         Alert.alert("등록 성공 🐣", `[${winnerMenu.name}]이 최애 음식 리스트에 등록되었습니다! 내 정보 탭에서 확인해 보세요.`);

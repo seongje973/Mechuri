@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator
 } from 'react-native';
+import { apiFetch } from '../api/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface HomeScreenProps {
@@ -33,8 +34,7 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
   const fetchRanking = async () => {
     try {
       setLoadingRanking(true);
-      const ip = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-      const response = await fetch(`http://${ip}:5000/api/restaurants/ranking`);
+      const response = await apiFetch(`/api/restaurants/ranking`);
       if (response.ok) {
         const data = await response.json();
         setRankingList(data.ranking || []);

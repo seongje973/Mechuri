@@ -243,7 +243,11 @@ router.get('/kakao/callback', async (req, res) => {
 });
 
 // --- Kakao Mobile REST API Sync ---
+// 카카오 검증 없이 이메일만으로 토큰을 내주는 개발용 단축 로그인. 운영에서는 남의 계정으로 로그인할 수 있으므로 막는다.
 router.post('/kakao/mobile', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found.' });
+  }
   try {
     const { id, email, nickname } = req.body;
 
