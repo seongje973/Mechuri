@@ -90,7 +90,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 결과 계산에 쓴 개인화 보정. "틀렸어요" 뒤 다시 계산할 때도 같은 값을 쓴다
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
-  const [eatenMenu, setEatenMenu] = useState<string | null>(null);
+  // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
+  const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const [favorited, setFavorited] = useState(false);
   const selectedNameRef = useRef<string | null>(null);
   // 하트 조회·토글마다 올라가는 번호. 늦게 온 이전 결과가 하트를 되돌리지 않게 한다
@@ -143,7 +144,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setSelectedMenu(null);
     setAdjustments({});
     setWorldCupResults([]);
-    setEatenMenu(null);
+    setEatenMenus([]);
     setRestaurantsList([]);
     setGameState('intro');
     refreshLocation();
@@ -228,7 +229,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const showResults = (ranked: RecommendResult[]) => {
     setResults(ranked);
-    setEatenMenu(null);
+    setEatenMenus([]);
     setGameState('reveal');
     revealAnim.setValue(0);
     Animated.spring(revealAnim, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();
@@ -355,7 +356,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     savingMenusRef.current.add(menu.name);
     try {
       await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
-      setEatenMenu(menu.name);
+      setEatenMenus(prev => (prev.includes(menu.name) ? prev : [...prev, menu.name]));
     } catch (e) {
       console.log("Failed to save eaten history", e);
       Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
@@ -535,13 +536,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                   <Text style={styles.actionLabel}>배달</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionPrimary, eatenMenu === results[0].item.name && styles.actionDone]}
+                  style={[styles.actionBtn, styles.actionPrimary, eatenMenus.includes(results[0].item.name) && styles.actionDone]}
                   onPress={() => handleEatThis(results[0].item)}
-                  disabled={eatenMenu === results[0].item.name}
+                  disabled={eatenMenus.includes(results[0].item.name)}
                 >
                   <Text style={styles.actionIcon}>😋</Text>
                   <Text style={[styles.actionLabel, styles.actionPrimaryLabel]}>
-                    {eatenMenu === results[0].item.name ? '맛있게 드세요!' : '이거 먹을래요'}
+                    {eatenMenus.includes(results[0].item.name) ? '맛있게 드세요!' : '이거 먹을래요'}
                   </Text>
                 </TouchableOpacity>
               </View>
