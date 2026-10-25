@@ -52,7 +52,7 @@ const Event = sequelize.define('Event', {
   indexes: [
     { fields: ['sessionId'] },
     { fields: ['type', 'occurredAt'] },
-    { unique: true, fields: ['deviceId', 'eventId'] }
+    { unique: true, fields: ['deviceId', 'eventId'], name: 'events_device_id_event_id' }
   ]
 });
 

@@ -29,7 +29,19 @@ const startServer = async (Event) => {
 const fakeEvent = () => {
   const saved = [];
   const options = [];
-  return { saved, options, bulkCreate: async (rows, opts) => { saved.push(...rows); options.push(opts); return rows; } };
+  return {
+    saved,
+    options,
+    bulkCreate: async (rows, opts) => {
+      options.push(opts);
+      // Postgres처럼 이미 있는 eventId 행은 건너뛰고 id 없이 돌려준다
+      return rows.map((row) => {
+        if (row.eventId && saved.some((s) => s.deviceId === row.deviceId && s.eventId === row.eventId)) return { ...row, id: null };
+        saved.push(row);
+        return { ...row, id: saved.length };
+      });
+    }
+  };
 };
 
 test('valid events become rows with payload and occurredAt', () => {
@@ -159,6 +171,7 @@ test('POST falls back to a guest row when the token user no longer exists', asyn
         throw error;
       }
       saved.push(...rows);
+      return rows.map((row, i) => ({ ...row, id: i + 1 }));
     }
   };
   const server = await startServer(Event);
@@ -182,6 +195,22 @@ test('POST keeps eventId and asks the DB to skip retried duplicates', async () =
     assert.strictEqual(res.status, 201);
     assert.strictEqual(Event.saved[0].eventId, eventId);
     assert.deepStrictEqual(Event.options[0], { ignoreDuplicates: true });
+  } finally {
+    server.close();
+  }
+});
+
+test('POST counts only rows actually inserted, so a full resend saves 0', async () => {
+  const Event = fakeEvent();
+  const server = await startServer(Event);
+  try {
+    const events = [
+      { type: 'rec_start', sessionId, eventId: 'evt-0000-0001' },
+      { type: 'rec_start', sessionId, eventId: 'evt-0000-0002' }
+    ];
+    assert.deepStrictEqual((await server.post({ deviceId, events })).body, { saved: 2 });
+    assert.deepStrictEqual((await server.post({ deviceId, events })).body, { saved: 0 });
+    assert.strictEqual(Event.saved.length, 2);
   } finally {
     server.close();
   }
