@@ -134,6 +134,71 @@ describe('게스트 저장소', () => {
     expect(body.histories.map((h: any) => h.menuName)).toEqual(['김치찌개']);
   });
 
+  it('저장 중이던 게스트 즐겨찾기도 이관에 포함한다', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ imported: { histories: 0, favorites: 1 }, avoidTags: '' }),
+    });
+    let release = () => {};
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    const realSetItem = setItem.getMockImplementation()!;
+    setItem.mockImplementationOnce(async (key: string, value: string) => {
+      await gate;
+      return realSetItem(key, value);
+    });
+    const pending = toggleFavorite({ menuName: '초밥' });
+    await flush();
+    await saveSession('jwt-1', { id: 1 });
+    const importing = importGuestData();
+    await flush();
+    release();
+    await Promise.all([pending, importing]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.favorites.map((f: any) => f.menuName)).toEqual(['초밥']);
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBeNull();
+  });
+
+  it('기기 즐겨찾기를 읽지 못하면 덮어쓰지 않는다', async () => {
+    await AsyncStorage.setItem(GUEST_KEYS.favorites, '{깨진 JSON');
+    await expect(toggleFavorite({ menuName: '초밥' })).rejects.toThrow();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBe('{깨진 JSON');
+  });
+
+  it('기기 즐겨찾기를 읽지 못하면 이관하지 않고 기기 기록을 남긴다', async () => {
+    await addHistory({ menuName: '김치찌개' });
+    await AsyncStorage.setItem(GUEST_KEYS.favorites, '{깨진 JSON');
+    await saveSession('jwt-1', { id: 1 });
+    await expect(importGuestData()).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.histories)).not.toBeNull();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBe('{깨진 JSON');
+  });
+
+  it('기기 즐겨찾기가 목록이 아니면 이관하지 않고 기기 기록을 남긴다', async () => {
+    await addHistory({ menuName: '김치찌개' });
+    await AsyncStorage.setItem(GUEST_KEYS.favorites, '{"menuName":"초밥"}');
+    await saveSession('jwt-1', { id: 1 });
+    await expect(importGuestData()).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBe('{"menuName":"초밥"}');
+  });
+
+  it('로그인 상태의 저장 요청이 늦어져도 이관은 기다리지 않는다', async () => {
+    await addHistory({ menuName: '김치찌개' });
+    await saveSession('jwt-1', { id: 1 });
+    fetchMock
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ imported: { histories: 1, favorites: 0 } }) });
+
+    void addHistory({ menuName: '초밥' });
+    await flush();
+    await expect(importGuestData()).resolves.toMatchObject({ imported: true, histories: 1 });
+    expect(fetchMock.mock.calls[0][1].signal).toBeDefined();
+  });
+
   it('이관이 실패하면 기기 기록을 남겨 다음에 다시 시도할 수 있다', async () => {
     await addHistory({ menuName: '김치찌개' });
     await saveSession('jwt-1', { id: 1 });

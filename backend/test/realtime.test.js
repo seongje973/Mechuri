@@ -199,3 +199,34 @@ test('a participant the open session does not know yet is added on join', async 
     await ctx.stop();
   }
 });
+
+test('a tie vote over sockets shows the same winner on every phone', async () => {
+  const ctx = await startServer();
+  try {
+    seedRoom(ctx.store);
+    const host = ctx.connect();
+    const guest = ctx.connect();
+    await call(host, 'join', { token: 'host-token' });
+    await call(guest, 'join', { token: 'guest-token' });
+    await call(guest, 'ready');
+    const finished = nextEvent(guest, 'room:finished');
+    await call(host, 'start');
+    for (let i = 0; i < 7; i++) await call(host, 'next');
+    await finished;
+
+    const candidates = ['김치찌개', '짜장면', '초밥', '파스타'];
+    const [a, b] = await Promise.all([call(host, 'vote:open', { candidates }), call(guest, 'vote:open', { candidates })]);
+    assert.deepStrictEqual(a.vote.candidates, candidates);
+    assert.deepStrictEqual(b.vote.candidates, candidates);
+
+    const hostResult = nextEvent(host, 'vote:result');
+    const guestResult = nextEvent(guest, 'vote:result');
+    await call(host, 'vote', { menu: '초밥' });
+    await call(guest, 'vote', { menu: '짜장면' });
+    const [r1, r2] = await Promise.all([hostResult, guestResult]);
+    assert.ok(['초밥', '짜장면'].includes(r1.winner));
+    assert.strictEqual(r1.winner, r2.winner);
+  } finally {
+    await ctx.stop();
+  }
+});
