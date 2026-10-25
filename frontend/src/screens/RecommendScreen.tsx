@@ -51,14 +51,16 @@ const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
   { answer: 'no', label: '👎 아니오' }
 ];
 
+// /api/restaurants 응답 (backend/src/routes/restaurant.js). 평점은 주지 않고, type은 있을 때만 온다
 interface Restaurant {
   name: string;
-  rating: string;
   distance: string;
   category: string;
   url: string;
   address: string;
-  type: string;
+  latitude?: number;
+  longitude?: number;
+  type?: string;
 }
 
 interface RecommendScreenProps {
@@ -742,9 +744,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                         <View style={{ flex: 1, paddingRight: 8 }}>
                           <View style={styles.resBadgeRow}>
                             <Text style={styles.resName} numberOfLines={1}>{res.name}</Text>
-                            <Text style={styles.resBadge}>{res.type}</Text>
+                            {!!res.type && <Text style={styles.resBadge}>{res.type}</Text>}
                           </View>
-                          <Text style={styles.resMeta} numberOfLines={1}>{res.rating} • {res.distance} • {res.category}</Text>
+                          <Text style={styles.resMeta} numberOfLines={1}>{[res.distance, res.category].filter(Boolean).join(' • ')}</Text>
                           <Text style={styles.resAddress} numberOfLines={1}>{res.address}</Text>
                         </View>
                         

@@ -351,6 +351,17 @@ describe('RecommendScreen', () => {
       expect(screen.getByText(/가게가 없어요$/)).toBeTruthy();
     });
 
+    it('평점 없이 온 식당도 거리·분류만 깔끔하게 보여 준다', async () => {
+      apiFetch.mockImplementation(async (path: string) =>
+        String(path).startsWith('/api/restaurants')
+          ? { ok: true, json: async () => ({ restaurants: [{ name: '진짜식당', distance: '350m', category: '한식', url: 'https://place.map.kakao.com/1', address: '서울 강남구' }] }) }
+          : { ok: true, json: async () => ({ histories: [] }) }
+      );
+      await reachReveal();
+      expect(screen.getByText('진짜식당')).toBeTruthy();
+      expect(screen.getByText('350m • 한식')).toBeTruthy();
+    });
+
     it('위치 권한이 없으면 강남역 기준이라고 알려 준다', async () => {
       await reachReveal();
       expect(screen.getByText('위치 권한이 꺼져 있어 강남역 기준으로 찾았어요')).toBeTruthy();
