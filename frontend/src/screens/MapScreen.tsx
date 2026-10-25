@@ -14,6 +14,7 @@ import {
 import { apiFetch } from '../api/client';
 import * as Location from 'expo-location';
 import MapView, { Marker, Callout } from 'react-native-maps';
+import { colors, fonts, radii } from '../theme';
 
 // 카카오 로컬 검색에는 평점이 없어서 평점은 받지도 보여주지도 않는다
 interface Restaurant {
@@ -236,7 +237,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
         <View style={styles.mapContainer}>
           {loading && !userCoords ? (
             <View style={styles.mapLoading}>
-              <ActivityIndicator size="large" color="#fbbf24" />
+              <ActivityIndicator size="large" color={colors.yolkDeep} />
               <Text style={styles.mapLoadingText}>지도를 로드하고 맛집을 스캔하는 중...</Text>
             </View>
           ) : (
@@ -342,7 +343,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#1c1917',
+    backgroundColor: colors.cream,
   },
   mainContainer: {
     flex: 1,
@@ -357,12 +358,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(41, 37, 36, 0.9)', // Onyx dark style
+    backgroundColor: colors.surface,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.15)',
+    borderColor: colors.line,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -374,47 +375,47 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   headerTitle: {
-    color: '#fbbf24',
-    fontWeight: '800',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 13.5,
   },
   headerSubtitle: {
-    color: '#a8a29e',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     fontSize: 11,
-    fontWeight: '600',
     marginTop: 2,
   },
   clearBtn: {
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.4)',
+    borderColor: colors.feather,
     borderRadius: 10,
     paddingVertical: 4,
     paddingHorizontal: 8,
     marginRight: 8,
   },
   clearBtnText: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 11,
-    fontWeight: '800',
   },
   emptyCard: {
     marginHorizontal: 16,
-    backgroundColor: 'rgba(41, 37, 36, 0.95)',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     padding: 16,
     alignItems: 'center',
   },
   emptyText: {
-    color: '#a8a29e',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     fontSize: 13,
-    fontWeight: '600',
   },
   sampleNotice: {
+    fontFamily: fonts.bold,
     alignSelf: 'center',
-    backgroundColor: 'rgba(41, 37, 36, 0.95)',
-    color: '#fbbf24',
+    backgroundColor: colors.surface,
+    color: colors.feather,
     fontSize: 11,
-    fontWeight: '700',
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 8,
@@ -423,15 +424,15 @@ const styles = StyleSheet.create({
   },
   retryBtn: {
     marginTop: 12,
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 12,
   },
   retryBtnText: {
-    color: '#1c1917',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 13,
-    fontWeight: '800',
   },
   refreshBtn: {
     padding: 2,
@@ -451,18 +452,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1c1917',
+    backgroundColor: colors.cream,
   },
   mapLoadingText: {
-    color: '#a8a29e',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     marginTop: 12,
     fontSize: 13.5,
-    fontWeight: '600',
   },
   customPin: {
-    backgroundColor: 'rgba(41, 37, 36, 0.9)',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#a8a29e',
+    borderColor: colors.line,
     width: 34,
     height: 34,
     borderRadius: 17,
@@ -475,18 +476,18 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   activePin: {
-    borderColor: '#fbbf24',
-    backgroundColor: '#fbbf24',
+    borderColor: colors.yolkDeep,
+    backgroundColor: colors.yolk,
     transform: [{ scale: 1.15 }],
   },
   pinEmoji: {
     fontSize: 16,
   },
   calloutBubble: {
-    backgroundColor: '#1c1917',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     borderWidth: 1.5,
-    borderColor: '#fbbf24',
+    borderColor: colors.feather,
     padding: 12,
     width: 220,
     alignItems: 'center',
@@ -496,28 +497,29 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   calloutName: {
-    color: '#ffffff',
-    fontWeight: '800',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 14,
     marginBottom: 4,
     textAlign: 'center',
   },
   calloutMeta: {
-    color: '#fbbf24',
-    fontWeight: '700',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 11.5,
     marginBottom: 4,
   },
   calloutAddress: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 10.5,
     marginBottom: 8,
     textAlign: 'center',
   },
   calloutLink: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 11,
-    fontWeight: '800',
     textDecorationLine: 'underline',
   },
   bottomPanel: {
@@ -532,10 +534,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   restaurantCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.95)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 20,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
     padding: 16,
     width: width - 48,
     marginRight: 16,
@@ -546,7 +548,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   activeCard: {
-    borderColor: 'rgba(251, 191, 36, 0.4)',
+    borderColor: colors.feather,
     borderWidth: 1.5,
   },
   cardHeader: {
@@ -556,41 +558,42 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardName: {
-    color: '#ffffff',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 15.5,
-    fontWeight: '900',
     flex: 1,
     paddingRight: 8,
   },
   cardBadge: {
-    backgroundColor: 'rgba(251, 191, 36, 0.15)',
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    backgroundColor: colors.yolkSoft,
+    color: colors.feather,
     fontSize: 9.5,
-    fontWeight: '800',
     paddingVertical: 3,
     paddingHorizontal: 7,
     borderRadius: 6,
   },
   cardMeta: {
-    color: '#a8a29e',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     fontSize: 12,
-    fontWeight: '600',
     marginBottom: 6,
   },
   cardAddress: {
-    color: '#78716c',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11,
     marginBottom: 12,
   },
   findRoadBtn: {
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: 'center',
   },
   findRoadText: {
-    color: '#1c1917',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 13,
-    fontWeight: '800',
-  }
+  },
 });
