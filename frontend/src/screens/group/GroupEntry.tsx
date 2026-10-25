@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AVOID_TAG_OPTIONS } from '../../constants/menuData';
 import { ROOM_CODE_LENGTH, RoomApiError, RoomMembership, createRoom, getRoom, joinRoom, normalizeRoomCode } from '../../api/rooms';
-import { G, gs } from './groupTheme';
+import { colors, fonts } from '../../theme';
+import { gs } from './groupTheme';
 
 interface Props {
   userProfile: any;
@@ -72,7 +73,7 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
           value={nickname}
           onChangeText={setNickname}
           placeholder="친구들에게 보일 이름"
-          placeholderTextColor={G.muted}
+          placeholderTextColor={colors.muted}
           maxLength={20}
           accessibilityLabel="닉네임"
         />
@@ -92,11 +93,11 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
       <View style={gs.card}>
         <Text style={gs.label}>초대받았다면 방 코드</Text>
         <TextInput
-          style={[gs.input, { letterSpacing: 6, fontSize: 22, textAlign: 'center', fontWeight: '800' }]}
+          style={[gs.input, { letterSpacing: 6, fontSize: 22, textAlign: 'center', fontFamily: fonts.bold }]}
           value={code}
           onChangeText={v => setCode(normalizeRoomCode(v))}
           placeholder="ABCD"
-          placeholderTextColor={G.line}
+          placeholderTextColor={colors.muted}
           autoCapitalize="characters"
           autoCorrect={false}
           maxLength={ROOM_CODE_LENGTH}
@@ -108,12 +109,12 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
           disabled={normalizedCode.length !== ROOM_CODE_LENGTH || busy !== null}
           onPress={() => run('join')}
         >
-          {busy === 'join' ? <ActivityIndicator color={G.ink} /> : <Text style={gs.primaryText}>참가하기</Text>}
+          {busy === 'join' ? <ActivityIndicator color={colors.ink} /> : <Text style={gs.primaryText}>참가하기</Text>}
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={[gs.secondary, busy !== null && gs.disabled]} disabled={busy !== null} onPress={() => run('create')}>
-        {busy === 'create' ? <ActivityIndicator color={G.ink} /> : <Text style={gs.secondaryText}>새 방 만들기</Text>}
+        {busy === 'create' ? <ActivityIndicator color={colors.ink} /> : <Text style={gs.secondaryText}>새 방 만들기</Text>}
       </TouchableOpacity>
       {error ? <Text style={gs.error}>{error}</Text> : null}
     </View>

@@ -3,7 +3,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { QUESTIONS } from '../../constants/akinatorQuestions';
 import { ScoreAnswer } from '../../engine/config';
 import { RoomState } from '../../api/roomSocket';
-import { G, gs } from './groupTheme';
+import { colors, fonts } from '../../theme';
+import { gs } from './groupTheme';
 
 interface Props {
   state: RoomState;
@@ -55,7 +56,7 @@ export default function GroupQuestion({ state, me, onAnswer, onSkip, onLeave }: 
     <View>
       <View style={styles.top}>
         <Text style={styles.progress}>질문 {question.index + 1}/{question.total}</Text>
-        <Text style={[styles.timer, left <= 5 && { color: G.chili }]}>⏱ {left}초</Text>
+        <Text style={[styles.timer, left <= 5 && { color: colors.chili }]}>⏱ {left}초</Text>
       </View>
       <View style={styles.bar}>
         <View style={[styles.barFill, { width: `${((question.index + (answered ? 1 : 0)) / question.total) * 100}%` }]} />
@@ -107,14 +108,14 @@ export default function GroupQuestion({ state, me, onAnswer, onSkip, onLeave }: 
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  progress: { fontSize: 14, fontWeight: '800', color: G.muted },
-  timer: { fontSize: 14, fontWeight: '800', color: G.feather },
-  bar: { height: 8, borderRadius: 999, backgroundColor: G.shell, marginTop: 8, overflow: 'hidden' },
-  barFill: { height: 8, backgroundColor: G.yolk },
+  progress: { fontSize: 14, fontFamily: fonts.bold, color: colors.muted },
+  timer: { fontSize: 14, fontFamily: fonts.bold, color: colors.feather },
+  bar: { height: 8, borderRadius: 999, backgroundColor: colors.shell, marginTop: 8, overflow: 'hidden' },
+  barFill: { height: 8, backgroundColor: colors.yolk },
   questionCard: { paddingVertical: 28, alignItems: 'center' },
-  mascot: { fontSize: 13, color: G.quail, fontWeight: '700' },
-  question: { fontSize: 22, fontWeight: '800', color: G.ink, textAlign: 'center', marginTop: 10, lineHeight: 30 },
+  mascot: { fontSize: 13, color: colors.quail, fontFamily: fonts.bold },
+  question: { fontSize: 22, fontFamily: fonts.display, color: colors.ink, textAlign: 'center', marginTop: 10, lineHeight: 30 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
   link: { padding: 8 },
-  linkText: { color: G.muted, fontSize: 14, textDecorationLine: 'underline' },
+  linkText: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, textDecorationLine: 'underline' },
 });
