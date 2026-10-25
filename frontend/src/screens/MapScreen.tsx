@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
   },
   clearBtn: {
     borderWidth: 1,
-    borderColor: colors.yolk,
+    borderColor: colors.feather,
     borderRadius: 10,
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1.5,
-    borderColor: colors.yolk,
+    borderColor: colors.feather,
     padding: 12,
     width: 220,
     alignItems: 'center',
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   activeCard: {
-    borderColor: colors.yolk,
+    borderColor: colors.feather,
     borderWidth: 1.5,
   },
   cardHeader: {
