@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity } from 'react-native';
-import HomeScreen, { FALLBACK_RANKING, getGreeting } from '../HomeScreen';
+import HomeScreen, { getGreeting } from '../HomeScreen';
 import { apiFetch } from '../../api/client';
 
 jest.mock('../../api/client', () => ({ apiFetch: jest.fn() }));
@@ -56,10 +56,26 @@ describe('HomeScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('지도');
   });
 
-  it('서버에 못 닿으면 기본 랭킹을 보여준다', async () => {
+  it('서버에 못 닿으면 지어낸 랭킹 대신 실패를 알린다', async () => {
     const { renderer } = await renderHome();
     const all = textOf(renderer.root);
-    FALLBACK_RANKING.forEach((item) => expect(all).toContain(item.menuName));
+    expect(all).toContain('랭킹을 불러오지 못했어요');
+    expect(all).not.toContain('삼겹살');
+  });
+
+  it('기록이 하나도 없으면 아직 데이터가 없다고 말한다', async () => {
+    mockedFetch.mockResolvedValue({ ok: true, json: async () => ({ ranking: [] }) });
+    const { renderer } = await renderHome();
+    expect(textOf(renderer.root)).toContain('아직 데이터가 없어요');
+  });
+
+  it('서버가 준 실제 랭킹을 그대로 보여준다', async () => {
+    mockedFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ranking: [{ rank: 1, menuName: '김치찌개', emoji: '🍲', category: '한식', count: 3 }] }),
+    });
+    const { renderer } = await renderHome();
+    expect(textOf(renderer.root)).toContain('김치찌개');
   });
 
   it('로그인하면 로그인 안내 대신 닉네임으로 인사한다', async () => {
