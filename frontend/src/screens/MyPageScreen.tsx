@@ -26,7 +26,7 @@ import {
   setAvoidTags
 } from '../storage/userData';
 import { requestLoginPrompt } from '../storage/loginPrompt';
-import { colors, radii } from '../theme/colors';
+import { colors, fonts, radii } from '../theme';
 
 interface MyPageScreenProps {
   navigation: any;
@@ -498,17 +498,19 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarText: {
+    fontFamily: fonts.body,
     fontSize: 28,
   },
   profileInfo: {
     flex: 1,
   },
   userName: {
+    fontFamily: fonts.display,
     fontSize: 19,
-    fontWeight: '800',
     color: colors.ink,
   },
   userEmail: {
+    fontFamily: fonts.body,
     fontSize: 13,
     color: colors.muted,
     marginTop: 3,
@@ -522,12 +524,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   authCardTitle: {
+    fontFamily: fonts.display,
     fontSize: 17,
-    fontWeight: '800',
     color: colors.ink,
     marginBottom: 8,
   },
   authCardDesc: {
+    fontFamily: fonts.body,
     fontSize: 13.5,
     color: colors.muted,
     lineHeight: 20,
@@ -542,15 +545,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   kakaoBtnText: {
+    fontFamily: fonts.bold,
     color: colors.ink,
     fontSize: 15,
-    fontWeight: '800',
   },
   devBypassBtn: {
     marginTop: 12,
     alignItems: 'center',
   },
   devBypassText: {
+    fontFamily: fonts.body,
     color: colors.feather,
     fontSize: 12.5,
     textDecorationLine: 'underline',
@@ -563,16 +567,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   accordionTitle: {
+    fontFamily: fonts.medium,
     color: colors.muted,
     fontSize: 13,
-    fontWeight: '600',
   },
   emailFormContent: {
     marginTop: 14,
   },
   formTitle: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: '800',
     color: colors.ink,
     marginBottom: 12,
   },
@@ -580,12 +584,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inputLabel: {
+    fontFamily: fonts.medium,
     fontSize: 12.5,
     color: colors.muted,
     marginBottom: 6,
-    fontWeight: '600',
   },
   input: {
+    fontFamily: fonts.body,
     backgroundColor: colors.cream,
     borderRadius: radii.sm,
     borderWidth: 1,
@@ -605,15 +610,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   emailSubmitText: {
+    fontFamily: fonts.bold,
     color: colors.ink,
     fontSize: 15,
-    fontWeight: '800',
   },
   modeSwitchBtn: {
     marginTop: 12,
     alignItems: 'center',
   },
   modeSwitchText: {
+    fontFamily: fonts.body,
     color: colors.feather,
     fontSize: 12.5,
   },
@@ -634,19 +640,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   statNumber: {
+    fontFamily: fonts.display,
     fontSize: 24,
-    fontWeight: '900',
     color: colors.yolkDeep,
   },
   statLabel: {
+    fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.muted,
     marginTop: 4,
-    fontWeight: '600',
   },
   sectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '800',
     color: colors.ink,
     marginBottom: 12,
   },
@@ -663,12 +669,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   menuText: {
+    fontFamily: fonts.medium,
     fontSize: 14.5,
     color: colors.ink,
-    fontWeight: '600',
     flex: 1,
   },
   arrow: {
+    fontFamily: fonts.body,
     fontSize: 14,
     color: colors.quail,
     marginLeft: 8,
@@ -682,9 +689,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutBtnText: {
+    fontFamily: fonts.bold,
     color: colors.chili,
     fontSize: 14.5,
-    fontWeight: '700',
   },
   deleteAccountBtn: {
     marginTop: 14,
@@ -692,11 +699,13 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   deleteAccountText: {
+    fontFamily: fonts.body,
     color: colors.muted,
     fontSize: 12.5,
     textDecorationLine: 'underline',
   },
   versionText: {
+    fontFamily: fonts.body,
     textAlign: 'center',
     color: colors.muted,
     fontSize: 11.5,
