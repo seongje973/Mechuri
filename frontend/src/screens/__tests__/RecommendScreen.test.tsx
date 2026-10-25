@@ -475,6 +475,25 @@ describe('RecommendScreen', () => {
       expect(weatherCalls()).toHaveLength(1);
     });
 
+    it('기피 태그를 읽는 사이 다시 시작하면 늦게 끝난 이전 시작은 버린다', async () => {
+      const { getAvoidTags } = jest.requireMock('../../storage/userData');
+      const { track } = jest.requireMock('../../analytics/events');
+      let slowTags!: (v: string[]) => void;
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (slowTags = r)));
+      renderScreen();
+      track.mockClear();
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      await act(async () => {
+        slowTags([]);
+      });
+      expect(track.mock.calls.filter((c: any[]) => c[1].type === 'rec_start')).toHaveLength(1);
+    });
+
     it('결과를 계산하는 사이 새 추천을 시작하면 이전 판 결과를 띄우지 않는다', async () => {
       const { getHistories } = jest.requireMock('../../storage/userData');
       let histories!: (v: unknown[]) => void;
