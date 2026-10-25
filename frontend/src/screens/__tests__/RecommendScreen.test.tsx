@@ -316,5 +316,37 @@ describe('RecommendScreen', () => {
       expect(await screen.findByText('당신이 생각한 메뉴는…', {}, { timeout: 3000 })).toBeTruthy();
     });
   });
-});
 
+  describe('주변 식당 목록 상태', () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const restaurantCalls = () => apiFetch.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/restaurants'));
+    afterEach(() => {
+      apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+    });
+
+    it('검색이 실패하면 가짜 식당 대신 다시 시도 버튼을 보여 준다', async () => {
+      apiFetch.mockImplementation(async (path: string) =>
+        String(path).startsWith('/api/restaurants')
+          ? { ok: false, status: 502, json: async () => ({}) }
+          : { ok: true, json: async () => ({ histories: [] }) }
+      );
+      await reachReveal();
+      expect(screen.getByText('식당 정보를 불러오지 못했어요')).toBeTruthy();
+      expect(screen.queryByText(/가마솥|소문난/)).toBeNull();
+
+      apiFetch.mockClear();
+      apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [] }) }));
+      await act(async () => {
+        fireEvent.press(screen.getByText('다시 시도'));
+      });
+      expect(restaurantCalls()).toHaveLength(1);
+      expect(screen.queryByText('식당 정보를 불러오지 못했어요')).toBeNull();
+      expect(screen.getByText(/가게가 없어요$/)).toBeTruthy();
+    });
+
+    it('위치 권한이 없으면 강남역 기준이라고 알려 준다', async () => {
+      await reachReveal();
+      expect(screen.getByText('위치 권한이 꺼져 있어 강남역 기준으로 찾았어요')).toBeTruthy();
+    });
+  });
+});
