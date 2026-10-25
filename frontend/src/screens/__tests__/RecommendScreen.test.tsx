@@ -8,6 +8,15 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
 }));
 
+jest.mock('../../storage/userData', () => ({
+  addHistory: jest.fn(async () => {}),
+  getAvoidTags: jest.fn(async () => []),
+  getFavorites: jest.fn(async () => []),
+  getHistories: jest.fn(async () => []),
+  isFavorite: jest.fn(async () => false),
+  toggleFavorite: jest.fn(async () => ({ favorited: true, count: 1 })),
+}));
+
 jest.mock('../../api/client', () => ({
   apiFetch: jest.fn(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) })),
   getStoredProfile: jest.fn(async () => null),
@@ -84,7 +93,7 @@ describe('RecommendScreen', () => {
   };
 
   const shownTop = () => {
-    const node = screen.getByText(/!$/);
+    const node = screen.getByTestId('reveal-name');
     return String(([] as unknown[]).concat(node.props.children).join('')).replace(/!$/, '');
   };
 
@@ -122,6 +131,9 @@ describe('RecommendScreen', () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+    // 게스트도 기록이 저장된다 (저장소가 기기/서버를 고른다)
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    expect(addHistory).toHaveBeenCalledWith(expect.objectContaining({ menuName: shownTop() }));
   });
 });
 

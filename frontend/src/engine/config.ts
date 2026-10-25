@@ -27,7 +27,7 @@ export const SHOW_SKIP_FROM_QUESTION = 3;
 /** 결과 카드에 붙이는 추천 이유 칩 최대 개수 */
 export const MAX_REASON_CHIPS = 3;
 
-/** 최근에 먹은 메뉴 감점 (기획서: 3일 이내 -2). S4(US-21)에서 즐겨찾기 보너스와 함께 다듬는다 */
+/** 최근에 먹은 메뉴 감점 (기획서: 3일 이내 -2) */
 export const RECENT_MEAL_PENALTY = -2;
 export const RECENT_MEAL_DAYS = 3;
 
@@ -37,3 +37,6 @@ export const RETRY_EXTRA_QUESTIONS = 3;
 export const RETRY_MIN_QUESTIONS = 2;
 /** 두 번째 "틀렸어요"부터는 상위 몇 개로 월드컵을 제안할지 */
 export const RETRY_WORLDCUP_SIZE = 4;
+
+/** 즐겨찾기한 메뉴 보너스 (US-21) */
+export const FAVORITE_BONUS = 1;

@@ -14,7 +14,8 @@ import {
   Animated
 } from 'react-native';
 import * as Location from 'expo-location';
-import { apiFetch, getStoredProfile } from '../api/client';
+import { apiFetch } from '../api/client';
+import { addHistory, getAvoidTags, getFavorites, getHistories, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { openDelivery } from '../utils/openDelivery';
@@ -37,9 +38,8 @@ import {
   toRecommendSession
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
-import { recentMealAdjustments } from '../engine/personalize';
+import { personalAdjustments } from '../engine/personalize';
 
-const parseAvoidTags = (raw?: string | null): string[] => (raw ? raw.split(',').filter(Boolean) : []);
 
 const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
   { answer: 'yes', label: '👍 예' },
@@ -91,6 +91,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
   const [eatenMenu, setEatenMenu] = useState<string | null>(null);
+  const [favorited, setFavorited] = useState(false);
+  const selectedNameRef = useRef<string | null>(null);
   const revealAnim = useRef(new Animated.Value(0)).current;
 
   // 지금 묻는 질문 번호 (1부터)
@@ -176,8 +178,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags)은 시작 전에 후보에서 뺀다
     let avoidTags: string[] = [];
     try {
-      const profile = await getStoredProfile();
-      avoidTags = parseAvoidTags(profile?.avoidTags);
+      avoidTags = await getAvoidTags();
     } catch (e) {
       console.log("Failed to load user avoid tags on setup", e);
     }
@@ -211,18 +212,15 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
+  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21). 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<Record<string, number>> => {
-    if (!isLoggedIn) return {};
     try {
-      const res = await apiFetch(`/api/user/histories`);
-      if (res.ok) {
-        const data = await res.json();
-        return recentMealAdjustments(data.histories || []);
-      }
+      const [histories, favorites] = await Promise.all([getHistories(), getFavorites()]);
+      return personalAdjustments({ histories, favorites });
     } catch (e) {
-      console.log("Failed to fetch history for recommendation adjustments", e);
+      console.log("Failed to load records for recommendation adjustments", e);
+      return {};
     }
-    return {};
   };
 
   const showResults = (ranked: RecommendResult[]) => {
@@ -283,6 +281,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const onSelectMenu = async (menu: MenuItem) => {
     setSelectedMenu(menu);
+    setFavorited(false);
+    selectedNameRef.current = menu.name;
+    isFavorite(menu.name)
+      .then(f => { if (selectedNameRef.current === menu.name) setFavorited(f); })
+      .catch(() => {});
     setLoadingRestaurants(true);
     setRestaurantsList([]);
 
@@ -308,21 +311,15 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const handleOpenMap = async (res: Restaurant) => {
     if (!selectedMenu) return;
 
-    if (isLoggedIn) {
-      try {
-        console.log(`📅 Logging history: Eaten ${selectedMenu.name} at ${res.name}`);
-        await apiFetch(`/api/user/histories`, {
-          method: 'POST',
-          body: {
-            menuName: selectedMenu.name,
-            emoji: selectedMenu.emoji,
-            restaurantName: res.name,
-            category: selectedMenu.category
-          }
-        });
-      } catch (e) {
-        console.log("Failed to sync eaten history to backend database", e);
-      }
+    try {
+      await addHistory({
+        menuName: selectedMenu.name,
+        emoji: selectedMenu.emoji,
+        restaurantName: res.name,
+        category: selectedMenu.category
+      });
+    } catch (e) {
+      console.log("Failed to save eaten history", e);
     }
 
     console.log("📡 Navigating to in-app map screen with restaurant param:", res.name);
@@ -341,51 +338,28 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     navigation.navigate("지도", { keyword: menu.name, requestedAt: Date.now() });
   };
 
-  // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다. 게스트 기록은 기기 저장소 연결(US-16) 뒤 같은 자리에서 저장
+  // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다 (게스트는 기기에)
   const handleEatThis = async (menu: MenuItem) => {
     setEatenMenu(menu.name);
-    if (isLoggedIn) {
-      try {
-        await apiFetch(`/api/user/histories`, {
-          method: 'POST',
-          body: { menuName: menu.name, emoji: menu.emoji, category: menu.category }
-        });
-      } catch (e) {
-        console.log("Failed to save eaten history", e);
-      }
+    try {
+      await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
+    } catch (e) {
+      console.log("Failed to save eaten history", e);
     }
   };
 
+  // 하트: 게스트도 기기에 저장한다. 로그인 안내는 저장소가 정한 때(3개째)만 뜬다 (US-17)
   const handleToggleFavorite = async () => {
     if (!selectedMenu) return;
-
-    if (!isLoggedIn) {
-      Alert.alert(
-        "로그인이 필요한 서비스입니다 🐣",
-        "최애 음식을 등록하고 나만의 맛집 리스트를 간직하려면 카카오로 로그인해 보세요!",
-        [
-          { text: "나중에" },
-          { text: "로그인하러 가기 ➔", onPress: () => navigation.navigate("마이페이지") }
-        ]
-      );
-      return;
-    }
-
     try {
-      console.log(`❤️ Toggling favorite for: ${selectedMenu.name}`);
-      const res = await apiFetch(`/api/user/favorites`, {
-        method: 'POST',
-        body: {
-          menuName: selectedMenu.name,
-          emoji: selectedMenu.emoji,
-          category: selectedMenu.category
-        }
+      const { favorited } = await toggleFavorite({
+        menuName: selectedMenu.name,
+        emoji: selectedMenu.emoji,
+        category: selectedMenu.category
       });
-      if (res.ok) {
-        Alert.alert("등록 성공 🐣", `[${selectedMenu.name}]이 최애 음식 리스트에 영구 보관되었습니다! 내 정보 탭에서 확인해 보세요.`);
-      }
+      setFavorited(favorited);
     } catch (e) {
-      Alert.alert("에러", "최애 메뉴 저장에 실패했습니다.");
+      Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
     }
   };
 
@@ -522,7 +496,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
             >
               <Text style={styles.revealLead}>{isRetry ? '그렇다면 이 메뉴는…' : '당신이 생각한 메뉴는…'}</Text>
               <Text style={styles.revealEmoji}>{results[0].item.emoji}</Text>
-              <Text style={styles.revealName}>{results[0].item.name}!</Text>
+              <Text style={styles.revealName} testID="reveal-name">{results[0].item.name}!</Text>
               <View style={styles.reasonRow}>
                 {results[0].reasons.map(reason => (
                   <View key={reason} style={styles.reasonChip}>
@@ -593,7 +567,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                   <View style={styles.titleRow}>
                     <Text style={styles.detailTitle}>{selectedMenu.name}</Text>
                     <TouchableOpacity onPress={handleToggleFavorite} style={styles.heartBtn}>
-                      <Text style={{ fontSize: 20 }}>❤️</Text>
+                      <Text style={{ fontSize: 20 }}>{favorited ? '❤️' : '🤍'}</Text>
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.detailCategory}>{selectedMenu.category}</Text>
