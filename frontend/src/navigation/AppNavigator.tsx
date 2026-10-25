@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Platform, View, ActivityIndicator, Linking } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, clearSession, getAuthToken, getStoredProfile, saveSession } from '../api/client';
+import { exchangeKakaoLoginCode } from '../api/kakaoLogin';
 
 // Import Screens
 import HomeScreen from '../screens/HomeScreen';
 import RecommendScreen from '../screens/RecommendScreen';
+import WorldCupScreen from '../screens/WorldCupScreen';
 import MapScreen from '../screens/MapScreen';
 import MyPageScreen from '../screens/MyPageScreen';
 
@@ -19,14 +21,35 @@ export default function AppNavigator() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const token = await AsyncStorage.getItem('auth_token');
-        const profile = await AsyncStorage.getItem('user_profile');
-        if (token && profile) {
-          setUserProfile(JSON.parse(profile));
-          setIsLoggedIn(true);
-        } else {
+        const token = await getAuthToken();
+        const profile = await getStoredProfile();
+        if (!token || !profile) {
           setIsLoggedIn(false);
           setUserProfile(null);
+          return;
+        }
+
+        // 예전 버전이 서버 연결 실패 때 저장하던 가짜 토큰('local_..._token_session_2026')은 버린다
+        if (token.startsWith('local_')) {
+          await clearSession();
+          setIsLoggedIn(false);
+          setUserProfile(null);
+          return;
+        }
+
+        setUserProfile(profile);
+        setIsLoggedIn(true);
+
+        // 서버가 토큰을 거절하면(만료·위조) 비로그인으로 되돌린다. 서버에 못 닿으면 일단 그대로 둔다.
+        try {
+          const res = await apiFetch('/api/auth/profile', { timeoutMs: 5000 });
+          if (res.status === 401) {
+            await clearSession();
+            setIsLoggedIn(false);
+            setUserProfile(null);
+          }
+        } catch (e) {
+          console.log('⚠️ Could not verify saved session (server unreachable)');
         }
       } catch (error) {
         setIsLoggedIn(false);
@@ -55,14 +78,12 @@ export default function AppNavigator() {
               }
             }
             
-            const token = params['token'];
-            const userJson = params['user'];
-            
-            if (token && userJson) {
-              const user = JSON.parse(userJson);
-              await AsyncStorage.setItem('auth_token', token);
-              await AsyncStorage.setItem('user_profile', JSON.stringify(user));
-              
+            // 서버는 토큰 대신 60초짜리 1회용 코드를 넘긴다. 토큰은 이 앱의 verifier와 함께 코드로 받는다.
+            const loginCode = params['code'];
+            if (loginCode) {
+              const { token, user } = await exchangeKakaoLoginCode(loginCode);
+              await saveSession(token, user);
+
               console.log("✅ Deep Link Auth Successful! Nickname:", user.nickname);
               setUserProfile(user);
               setIsLoggedIn(true);
@@ -91,10 +112,10 @@ export default function AppNavigator() {
 
   const handleLoginSuccess = async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const profile = await AsyncStorage.getItem('user_profile');
+      const token = await getAuthToken();
+      const profile = await getStoredProfile();
       if (token && profile) {
-        setUserProfile(JSON.parse(profile));
+        setUserProfile(profile);
         setIsLoggedIn(true);
       }
     } catch (error) {
@@ -104,8 +125,7 @@ export default function AppNavigator() {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('auth_token');
-      await AsyncStorage.removeItem('user_profile');
+      await clearSession();
       setIsLoggedIn(false);
       setUserProfile(null);
       console.log("✅ Logged out successfully. Session cleared.");
@@ -167,6 +187,15 @@ export default function AppNavigator() {
         }}
       >
         {props => <RecommendScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
+      </Tab.Screen>
+
+      <Tab.Screen 
+        name="월드컵" 
+        options={{
+          tabBarLabel: '🏆 월드컵',
+        }}
+      >
+        {props => <WorldCupScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
       </Tab.Screen>
       
       <Tab.Screen 
