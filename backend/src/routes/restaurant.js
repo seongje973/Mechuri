@@ -5,6 +5,33 @@ const { sequelize } = require('../config/db');
 const History = require('../models/History');
 require('dotenv').config();
 
+// 같은 자리에서 같은 메뉴를 다시 찾을 때 카카오 API를 또 부르지 않도록 10분간 결과를 기억한다.
+// 좌표는 소수점 셋째 자리(약 100m)로 반올림해 키를 만든다. 서버 한 대 기준의 메모리 캐시다.
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 500;
+const restaurantCache = new Map();
+
+const buildCacheKey = (keyword, lng, lat) =>
+  `${Number(lng).toFixed(3)},${Number(lat).toFixed(3)}|${keyword.trim()}`;
+
+const readCache = (key) => {
+  const entry = restaurantCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.storedAt > CACHE_TTL_MS) {
+    restaurantCache.delete(key);
+    return null;
+  }
+  return entry.body;
+};
+
+const writeCache = (key, body) => {
+  // Map은 넣은 순서를 지키므로 맨 앞이 가장 오래된 항목이다
+  if (restaurantCache.size >= CACHE_MAX_ENTRIES) {
+    restaurantCache.delete(restaurantCache.keys().next().value);
+  }
+  restaurantCache.set(key, { storedAt: Date.now(), body });
+};
+
 router.get('/', async (req, res) => {
   const { keyword, x, y } = req.query;
 
@@ -23,6 +50,12 @@ router.get('/', async (req, res) => {
 
   // 1. 카카오 API 키가 정상적으로 설정되어 있는 경우
   if (!isDefaultKey) {
+    const cacheKey = buildCacheKey(keyword, currentLng, currentLat);
+    const cached = readCache(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true });
+    }
+
     try {
       console.log(`🌐 Calling Kakao Local API for keyword: "${keyword}" at coordinates (${currentLng}, ${currentLat})`);
       
@@ -34,6 +67,7 @@ router.get('/', async (req, res) => {
           query: keyword,
           x: currentLng,
           y: currentLat,
+          category_group_code: 'FD6', // 음식점만
           radius: 1500,          // 반경 1.5km 이내 검색
           sort: 'distance'       // 거리순 정렬
         }
@@ -58,11 +92,13 @@ router.get('/', async (req, res) => {
         };
       });
 
-      return res.json({
+      const body = {
         source: 'Kakao Local API Real-time Data',
         count: restaurants.length,
         restaurants
-      });
+      };
+      writeCache(cacheKey, body);
+      return res.json(body);
 
     } catch (error) {
       console.error('❌ Kakao API Request Error:', error.message);
@@ -183,3 +219,6 @@ router.get('/ranking', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.CACHE_TTL_MS = CACHE_TTL_MS;
+module.exports.buildCacheKey = buildCacheKey;
+module.exports.clearRestaurantCache = () => restaurantCache.clear();
