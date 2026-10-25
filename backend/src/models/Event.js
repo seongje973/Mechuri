@@ -23,6 +23,11 @@ const Event = sequelize.define('Event', {
     type: DataTypes.STRING(64),
     allowNull: false
   },
+  // 앱이 이벤트마다 만드는 ID. 응답을 못 받아 다시 보낸 묶음이 두 번 저장되지 않게 한다
+  eventId: {
+    type: DataTypes.STRING(64),
+    allowNull: true
+  },
   userId: {
     type: DataTypes.INTEGER,
     allowNull: true,
@@ -46,7 +51,8 @@ const Event = sequelize.define('Event', {
   updatedAt: false,
   indexes: [
     { fields: ['sessionId'] },
-    { fields: ['type', 'occurredAt'] }
+    { fields: ['type', 'occurredAt'] },
+    { unique: true, fields: ['deviceId', 'eventId'] }
   ]
 });
 

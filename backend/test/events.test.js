@@ -28,7 +28,8 @@ const startServer = async (Event) => {
 
 const fakeEvent = () => {
   const saved = [];
-  return { saved, bulkCreate: async (rows) => { saved.push(...rows); return rows; } };
+  const options = [];
+  return { saved, options, bulkCreate: async (rows, opts) => { saved.push(...rows); options.push(opts); return rows; } };
 };
 
 test('valid events become rows with payload and occurredAt', () => {
@@ -41,6 +42,7 @@ test('valid events become rows with payload and occurredAt', () => {
     type: 'question_answer',
     sessionId,
     deviceId,
+    eventId: null,
     userId: null,
     payload: { questionId: 'soup', answer: 'yes' },
     occurredAt: new Date('2026-12-14T02:59:00Z')
@@ -65,7 +67,9 @@ test('invalid events are rejected with a reason', () => {
     [{ type: 'result_shown', sessionId, deviceId, payload: {} }, /menu/],
     [{ type: 'accept', sessionId, deviceId, payload: { action: 'share', menu: '짬뽕' } }, /action/],
     [{ type: 'reject', sessionId, deviceId, payload: [] }, /payload/],
-    [{ type: 'rec_start', sessionId, deviceId, payload: { note: 'x'.repeat(3000) } }, /too large/]
+    [{ type: 'rec_start', sessionId, deviceId, payload: { note: 'x'.repeat(3000) } }, /too large/],
+    [{ type: 'rec_start', sessionId, deviceId, eventId: 'bad id!' }, /eventId/],
+    [{ type: 'rec_start', sessionId, deviceId, eventId: 12345678 }, /eventId/]
   ];
   for (const [raw, pattern] of cases) {
     assert.match(normalizeEvent(raw).error, pattern, JSON.stringify(raw).slice(0, 80));
@@ -164,6 +168,20 @@ test('POST falls back to a guest row when the token user no longer exists', asyn
     assert.strictEqual(res.status, 201);
     assert.strictEqual(calls, 2);
     assert.strictEqual(saved[0].userId, null);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST keeps eventId and asks the DB to skip retried duplicates', async () => {
+  const Event = fakeEvent();
+  const server = await startServer(Event);
+  try {
+    const eventId = 'evt-0000-0001';
+    const res = await server.post({ deviceId, events: [{ type: 'rec_start', sessionId, eventId }] });
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(Event.saved[0].eventId, eventId);
+    assert.deepStrictEqual(Event.options[0], { ignoreDuplicates: true });
   } finally {
     server.close();
   }

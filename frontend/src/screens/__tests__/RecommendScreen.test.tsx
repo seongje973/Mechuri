@@ -142,6 +142,18 @@ describe('RecommendScreen', () => {
     expect(addHistory).toHaveBeenCalledWith(expect.objectContaining({ menuName: shownTop() }));
   });
 
+  it('즐겨찾기를 못 읽어도 최근 먹은 기록 감점은 적용된다', async () => {
+    await reachReveal();
+    const first = shownTop();
+    screen.unmount();
+
+    const { getFavorites, getHistories } = jest.requireMock('../../storage/userData');
+    getFavorites.mockRejectedValueOnce(new Error('favorites failed'));
+    getHistories.mockResolvedValueOnce([{ menuName: first, createdAt: Date.now() }]);
+    await reachReveal();
+    expect(shownTop()).not.toBe(first);
+  });
+
   it('기록 저장이 실패하면 먹을래요가 다시 눌리는 상태로 남는다', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
