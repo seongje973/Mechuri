@@ -347,11 +347,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다. 게스트 기록은 기기 저장소 연결(US-16) 뒤 같은 자리에서 저장
-  // 저장 중에 한 번 더 눌러도 기록이 두 번 남지 않게 막는다
-  const eatingRef = useRef(false);
+  // 저장 중에 같은 메뉴를 한 번 더 눌러도 기록이 두 번 남지 않게 막는다 (다른 메뉴는 따로 저장)
+  const savingMenusRef = useRef(new Set<string>());
   const handleEatThis = async (menu: MenuItem) => {
-    if (eatingRef.current) return;
-    eatingRef.current = true;
+    if (savingMenusRef.current.has(menu.name)) return;
+    savingMenusRef.current.add(menu.name);
     try {
       if (isLoggedIn) {
         const res = await apiFetch(`/api/user/histories`, {
@@ -365,7 +365,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       console.log("Failed to save eaten history", e);
       Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
     } finally {
-      eatingRef.current = false;
+      savingMenusRef.current.delete(menu.name);
     }
   };
 

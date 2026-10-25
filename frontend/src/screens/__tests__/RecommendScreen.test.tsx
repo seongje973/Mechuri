@@ -171,4 +171,32 @@ describe('RecommendScreen', () => {
     expect(posts).toHaveLength(1);
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
+
+  it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    apiFetch.mockClear();
+    apiFetch.mockImplementationOnce(() => new Promise(() => {}));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    const altName = screen.getAllByTestId('alt-name')[0].props.children as string;
+    await act(async () => {
+      fireEvent.press(screen.getByText(altName));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    const saved = apiFetch.mock.calls.filter((c: any[]) => c[0] === '/api/user/histories').map((c: any[]) => c[1].body.menuName);
+    expect(saved).toHaveLength(2);
+    expect(saved[1]).toBe(altName);
+  });
 });
