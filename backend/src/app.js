@@ -11,6 +11,7 @@ const History = require('./models/History');
 const Room = require('./models/Room');
 const Participant = require('./models/Participant');
 const Event = require('./models/Event');
+require('./models/LoginCode');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,19 +22,23 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Connect to Database & Sync Tables
+// 운영(NODE_ENV=production)은 테이블을 건드리지 않는다. 스키마는 마이그레이션(npm run db:migrate)으로만 바꾼다.
+// 개발은 편하도록 sync({ alter: true })를 계속 쓴다. 마이그레이션으로 개발하고 싶으면 DB_SYNC=off.
 const initDatabase = async () => {
   await connectDB();
+  if (process.env.NODE_ENV === 'production' || process.env.DB_SYNC === 'off') {
+    console.log('🔄 Database sync skipped. Run `npm run db:migrate` to update tables.');
+    return;
+  }
   try {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    await sequelize.sync(isDevelopment ? { alter: true } : undefined);
-    console.log(
-      `🔄 Database tables synchronized successfully. (alter mode: ${isDevelopment ? 'on' : 'off'})`
-    );
+    await sequelize.sync({ alter: true });
+    console.log('🔄 Database tables synchronized successfully. (alter mode: on)');
   } catch (error) {
     console.error('❌ Failed to sync database tables:', error.message);
   }
 };
-initDatabase();
+// 닫힌 지 30일 지난 같이 정하기 방 기록 정리 (6시간마다)
+initDatabase().then(() => require('./realtime/roomCleanup').startRoomCleanup());
 
 // Basic Route
 app.get('/', (req, res) => {

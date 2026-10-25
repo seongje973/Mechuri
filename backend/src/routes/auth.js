@@ -217,7 +217,7 @@ router.get('/kakao/callback', async (req, res) => {
       nickname: user.nickname,
       avoidTags: user.avoidTags
     };
-    const loginCode = createLoginCode({ token: jwtToken, user: userData }, challenge);
+    const loginCode = await createLoginCode({ token: jwtToken, user: userData }, challenge);
     const appUrl = buildAppReturnUrl(loginCode, returnHost);
     // 스크립트 안에 넣는 값은 JSON으로 만들고 '<'를 이스케이프해서 </script> 주입을 막는다
     const appUrlJs = JSON.stringify(appUrl).replace(/</g, '\\u003c');
@@ -252,13 +252,18 @@ router.get('/kakao/callback', async (req, res) => {
 // --- Kakao login code exchange ---
 // 카카오 콜백이 딥링크로 넘긴 1회용 코드를 토큰으로 바꾼다.
 // 코드는 60초 안에 한 번만 시도할 수 있고, 로그인을 시작한 앱의 verifier가 있어야 한다.
-router.post('/kakao/exchange', (req, res) => {
-  const result = redeemLoginCode(req.body?.code, req.body?.verifier);
-  if (!result) {
-    return res.status(400).json({ error: 'Invalid or expired login code.' });
+router.post('/kakao/exchange', async (req, res) => {
+  try {
+    const result = await redeemLoginCode(req.body?.code, req.body?.verifier);
+    if (!result) {
+      return res.status(400).json({ error: 'Invalid or expired login code.' });
+    }
+    res.set('Cache-Control', 'no-store');
+    return res.json(result);
+  } catch (error) {
+    console.error('❌ Kakao login code exchange failed:', error.message);
+    return res.status(500).json({ error: 'Login code exchange failed.' });
   }
-  res.set('Cache-Control', 'no-store');
-  return res.json(result);
 });
 
 // --- Kakao Mobile REST API Sync ---

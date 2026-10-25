@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -21,20 +21,16 @@ const { width } = Dimensions.get('window');
 
 interface Restaurant {
   name: string;
-  rating: string;
   distance: string;
   category: string;
   url: string;
   address: string;
-  type: string;
+  type?: string;
 }
 
-const getOfflineFallbackRestaurants = (menuName: string): Restaurant[] => {
-  return [
-    { name: `가마솥 전통 ${menuName} 마포본점`, rating: '⭐ 4.8', distance: '150m', category: '음식점', url: `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(menuName)}`, address: '서울시 마포구 역삼로', type: '오프라인 추천' },
-    { name: `소문난 3대 맛집 ${menuName}`, rating: '⭐ 4.6', distance: '380m', category: '전문 식당', url: `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(menuName)}`, address: '서울시 강남구 테헤란로', type: '인기 매장' },
-  ];
-};
+// 위치를 못 받았을 때 쓰는 기본 위치 (강남역). 화면에도 그렇게 표시한다
+const DEFAULT_COORDS = { latitude: 37.497942, longitude: 127.0276197 };
+const RESTAURANTS_TIMEOUT_MS = 8000;
 
 interface WorldCupScreenProps {
   navigation: any;
@@ -64,6 +60,11 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
   const [restaurantsList, setRestaurantsList] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  const [restaurantsError, setRestaurantsError] = useState(false);
+  // 검색할 때 실제로 내 위치를 썼는지 (제목 표시용)
+  const [searchedNearUser, setSearchedNearUser] = useState(false);
+  // 가장 최근 식당 검색의 번호. 지난 검색의 늦은 응답이 화면을 덮어쓰지 않게 한다
+  const restaurantsRequestId = useRef(0);
 
   // 컴포넌트 마운트 시 위치 권한 요청 및 좌표 획득
   useEffect(() => {
@@ -88,6 +89,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
   // 게임 시작 설정
   const startWorldCup = (rounds: 8 | 16) => {
+    restaurantsRequestId.current += 1;
     setTotalRounds(rounds);
     
     // 전체 메뉴 데이터에서 랜덤 셔플 후 필요한 개수만큼 추출
@@ -132,6 +134,41 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
     }
   };
 
+  // 주변 식당 검색. 실패하면 지어낸 식당 대신 오류와 다시 시도 버튼을 보여 준다
+  const loadRestaurants = async (menuName: string) => {
+    const requestId = ++restaurantsRequestId.current;
+    const isLatest = () => requestId === restaurantsRequestId.current;
+    setLoadingRestaurants(true);
+    setRestaurantsError(false);
+    setRestaurantsList([]);
+    setSearchedNearUser(!!userCoords);
+
+    // 본문 읽기까지 포함해 8초가 지나면 실패로 본다
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('restaurants timeout')), RESTAURANTS_TIMEOUT_MS);
+    });
+    try {
+      const { latitude, longitude } = userCoords ?? DEFAULT_COORDS;
+      const url = `/api/restaurants?keyword=${encodeURIComponent(menuName)}&x=${longitude}&y=${latitude}`;
+      const data = await Promise.race([
+        (async () => {
+          const response = await apiFetch(url, { timeoutMs: RESTAURANTS_TIMEOUT_MS });
+          if (!response.ok) throw new Error(`restaurants ${response.status}`);
+          return response.json();
+        })(),
+        timeout,
+      ]);
+      if (isLatest()) setRestaurantsList(data.restaurants || []);
+    } catch (error) {
+      console.log("Failed to load restaurants for WorldCup winner", error);
+      if (isLatest()) setRestaurantsError(true);
+    } finally {
+      clearTimeout(timer);
+      if (isLatest()) setLoadingRestaurants(false);
+    }
+  };
+
   // 최종 우승 처리 및 맛집 API 동기화
   const finishWorldCup = async (winner: MenuItem) => {
     setWinnerMenu(winner);
@@ -145,27 +182,9 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
         console.log("Failed to load WorldCup winner favorite state", e);
         setWinnerFavorited(prev => (prev === null ? false : prev));
       });
-    setLoadingRestaurants(true);
-    setRestaurantsList([]);
 
     // 1. 주변 식당 목록 API 호출
-    try {
-      const lat = userCoords?.latitude || '37.497942';
-      const lng = userCoords?.longitude || '127.0276197';
-      const url = `/api/restaurants?keyword=${encodeURIComponent(winner.name)}&x=${lng}&y=${lat}`;
-
-      const response = await apiFetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setRestaurantsList(data.restaurants || []);
-      } else {
-        setRestaurantsList(getOfflineFallbackRestaurants(winner.name));
-      }
-    } catch (error) {
-      setRestaurantsList(getOfflineFallbackRestaurants(winner.name));
-    } finally {
-      setLoadingRestaurants(false);
-    }
+    await loadRestaurants(winner.name);
 
     // 2. 우승 메뉴를 식사 기록에 저장 (게스트는 이 기기에, 로그인은 서버에)
     try {
@@ -373,13 +392,20 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
           {/* 주변 식당 매칭 */}
           <View style={styles.restaurantsSection}>
             <Text style={styles.restaurantsTitle}>
-              📍 내 GPS 주변 실제 {winnerMenu.name} 식당 목록
+              📍 {searchedNearUser ? '내 주변' : '강남역 근처 (위치 권한 없음)'} {winnerMenu.name} 식당
             </Text>
 
             {loadingRestaurants ? (
               <View style={styles.loadingWrapper}>
                 <ActivityIndicator size="large" color="#fbbf24" />
                 <Text style={styles.loadingText}>메추리가 실제 식당 정보를 검색하는 중...</Text>
+              </View>
+            ) : restaurantsError ? (
+              <View style={styles.emptyWrapper}>
+                <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</Text>
+                <TouchableOpacity style={styles.reloadBtn} onPress={() => loadRestaurants(winnerMenu.name)}>
+                  <Text style={styles.reloadBtnText}>다시 시도</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               restaurantsList.length > 0 ? (
@@ -389,10 +415,10 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <View style={styles.resBadgeRow}>
                           <Text style={styles.resName} numberOfLines={1}>{res.name}</Text>
-                          <Text style={styles.resTypeBadge}>{res.type}</Text>
+                          {!!res.type && <Text style={styles.resTypeBadge}>{res.type}</Text>}
                         </View>
                         <Text style={styles.resMeta} numberOfLines={1}>
-                          {res.rating} • {res.distance} • {res.category}
+                          {[res.distance, res.category].filter(Boolean).join(' • ')}
                         </Text>
                         <Text style={styles.resAddress} numberOfLines={1}>{res.address}</Text>
                       </View>
@@ -776,6 +802,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
+  },
+  reloadBtn: {
+    marginTop: 12,
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  reloadBtnText: {
+    color: '#fbbf24',
+    fontSize: 13,
+    fontWeight: '700',
   },
   emptyText: {
     color: '#78716c',

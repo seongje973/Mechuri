@@ -30,3 +30,10 @@ export const MAX_REASON_CHIPS = 3;
 /** 최근에 먹은 메뉴 감점 (기획서: 3일 이내 -2). S4(US-21)에서 즐겨찾기 보너스와 함께 다듬는다 */
 export const RECENT_MEAL_PENALTY = -2;
 export const RECENT_MEAL_DAYS = 3;
+
+/** "틀렸어요" 뒤에 더 묻는 질문 수 (US-15) */
+export const RETRY_EXTRA_QUESTIONS = 3;
+/** "틀렸어요" 뒤에 1위가 크게 앞서도 최소한 묻는 질문 수 */
+export const RETRY_MIN_QUESTIONS = 2;
+/** 두 번째 "틀렸어요"부터는 상위 몇 개로 월드컵을 제안할지 */
+export const RETRY_WORLDCUP_SIZE = 4;

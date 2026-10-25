@@ -7,31 +7,36 @@ const {
   resolveDevReturnHost,
   buildAppReturnUrl,
   sha256Hex,
+  createMemoryLoginCodeStore,
+  setLoginCodeStore,
   CODE_TTL_MS
 } = require('../src/auth/loginHandoff');
+
+// DB 저장소 테스트는 loginCodeStore.db.test.js (TEST_DATABASE_URL이 있을 때만)
+setLoginCodeStore(createMemoryLoginCodeStore());
 
 const verifier = 'a'.repeat(64);
 const challenge = sha256Hex(verifier);
 
-test('login code can be redeemed once with the matching verifier', () => {
-  const code = createLoginCode({ token: 't', user: { id: 1 } }, challenge);
-  assert.deepStrictEqual(redeemLoginCode(code, verifier), { token: 't', user: { id: 1 } });
-  assert.strictEqual(redeemLoginCode(code, verifier), null);
+test('login code can be redeemed once with the matching verifier', async () => {
+  const code = await createLoginCode({ token: 't', user: { id: 1 } }, challenge);
+  assert.deepStrictEqual(await redeemLoginCode(code, verifier), { token: 't', user: { id: 1 } });
+  assert.strictEqual(await redeemLoginCode(code, verifier), null);
 });
 
-test('login code is bound to the app that started the login', () => {
-  const code = createLoginCode({ token: 't' }, challenge);
-  assert.strictEqual(redeemLoginCode(code, 'b'.repeat(64)), null);
+test('login code is bound to the app that started the login', async () => {
+  const code = await createLoginCode({ token: 't' }, challenge);
+  assert.strictEqual(await redeemLoginCode(code, 'b'.repeat(64)), null);
   // 틀린 verifier로 한 번 시도하면 코드는 버려진다
-  assert.strictEqual(redeemLoginCode(code, verifier), null);
-  assert.strictEqual(redeemLoginCode(createLoginCode({ token: 't' }, challenge), undefined), null);
-  assert.throws(() => createLoginCode({ token: 't' }, 'not-a-challenge'));
+  assert.strictEqual(await redeemLoginCode(code, verifier), null);
+  assert.strictEqual(await redeemLoginCode(await createLoginCode({ token: 't' }, challenge), undefined), null);
+  await assert.rejects(() => createLoginCode({ token: 't' }, 'not-a-challenge'));
 });
 
-test('login code expires', () => {
+test('login code expires', async () => {
   const now = Date.now();
-  const code = createLoginCode({ token: 't' }, challenge, now);
-  assert.strictEqual(redeemLoginCode(code, verifier, now + CODE_TTL_MS + 1), null);
+  const code = await createLoginCode({ token: 't' }, challenge, now);
+  assert.strictEqual(await redeemLoginCode(code, verifier, now + CODE_TTL_MS + 1), null);
 });
 
 test('state carries the dev host and the challenge', () => {
@@ -74,10 +79,10 @@ test('POST /kakao/exchange needs the verifier and works once', async () => {
   const post = (path, body) =>
     fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   try {
-    const stolen = createLoginCode({ token: 'jwt', user: { id: 7 } }, challenge);
+    const stolen = await createLoginCode({ token: 'jwt', user: { id: 7 } }, challenge);
     assert.strictEqual((await post('/kakao/exchange', { code: stolen })).status, 400);
 
-    const code = createLoginCode({ token: 'jwt', user: { id: 7 } }, challenge);
+    const code = await createLoginCode({ token: 'jwt', user: { id: 7 } }, challenge);
     const first = await post('/kakao/exchange', { code, verifier });
     assert.strictEqual(first.status, 200);
     assert.deepStrictEqual(await first.json(), { token: 'jwt', user: { id: 7 } });
