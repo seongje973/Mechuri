@@ -21,12 +21,11 @@ const { width } = Dimensions.get('window');
 
 interface Restaurant {
   name: string;
-  rating: string;
   distance: string;
   category: string;
   url: string;
   address: string;
-  type: string;
+  type?: string;
 }
 
 // 위치를 못 받았을 때 쓰는 기본 위치 (강남역). 화면에도 그렇게 표시한다
@@ -395,10 +394,10 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <View style={styles.resBadgeRow}>
                           <Text style={styles.resName} numberOfLines={1}>{res.name}</Text>
-                          <Text style={styles.resTypeBadge}>{res.type}</Text>
+                          {!!res.type && <Text style={styles.resTypeBadge}>{res.type}</Text>}
                         </View>
                         <Text style={styles.resMeta} numberOfLines={1}>
-                          {res.rating} • {res.distance} • {res.category}
+                          {[res.distance, res.category].filter(Boolean).join(' • ')}
                         </Text>
                         <Text style={styles.resAddress} numberOfLines={1}>{res.address}</Text>
                       </View>
