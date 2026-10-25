@@ -216,3 +216,15 @@ export const importGuestData = async (): Promise<GuestImportResult> => {
     avoidTags: parseAvoidTags(data.avoidTags),
   };
 };
+
+// --- 회원 탈퇴 ---
+
+/**
+ * 서버에서 계정과 기록을 모두 지우고, 이 기기에 남은 게스트 기록도 지운다.
+ * 로그인 세션은 부른 쪽(AppNavigator의 로그아웃)이 지운다.
+ */
+export const deleteAccount = async (): Promise<void> => {
+  if (await isGuest()) throw new Error('Not logged in');
+  await requestJson('/api/user/account', { method: 'DELETE', timeoutMs: 10000 });
+  await AsyncStorage.multiRemove(Object.values(GUEST_KEYS));
+};
