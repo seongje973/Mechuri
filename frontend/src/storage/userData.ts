@@ -55,6 +55,31 @@ const readList = async <T>(key: string): Promise<T[]> => {
   }
 };
 
+// 읽고-고쳐-쓰기용. 읽기에 실패하면 빈 목록으로 덮어쓰지 않도록 오류를 그대로 던진다
+const readListStrict = async <T>(key: string): Promise<T[]> => {
+  const raw = await AsyncStorage.getItem(key);
+  const parsed = raw ? JSON.parse(raw) : [];
+  if (!Array.isArray(parsed)) throw new Error(`${key} is not a list`);
+  return parsed;
+};
+
+// 게스트 기록·즐겨찾기 쓰기와 로그인 이관을 하나씩 차례로 실행한다.
+// 게스트인지 확인하는 것부터 큐 안에서 해야, 확인과 쓰기 사이에 이관이 끼어들지 않는다
+let guestQueue: Promise<unknown> = Promise.resolve();
+const withGuestLock = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = guestQueue.then(task);
+  guestQueue = run.catch(() => undefined);
+  return run;
+};
+
+// 게스트면 큐 안에서 task를 실행해 { value }를, 로그인 상태면 null을 돌려준다.
+// 로그인 요청은 큐 밖에서 보내야 응답이 늦어도 게스트 쓰기와 이관이 막히지 않는다
+const whenGuest = <T>(task: () => Promise<T>): Promise<{ value: T } | null> =>
+  withGuestLock(async () => ((await isGuest()) ? { value: await task() } : null));
+
+/** 로그인 상태의 쓰기 요청 제한 시간 */
+const WRITE_TIMEOUT_MS = 10000;
+
 const writeList = (key: string, list: unknown[]) => AsyncStorage.setItem(key, JSON.stringify(list));
 
 const requestJson = async (path: string, init: Parameters<typeof apiFetch>[1] = {}) => {
@@ -93,13 +118,13 @@ export const getHistories = async (): Promise<HistoryEntry[]> => {
 };
 
 export const addHistory = async (entry: NewHistory): Promise<void> => {
-  if (await isGuest()) {
-    const list = await readList<HistoryEntry>(GUEST_KEYS.histories);
+  const guest = await whenGuest(async () => {
+    const list = await readListStrict<HistoryEntry>(GUEST_KEYS.histories);
     const next = [{ ...entry, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT);
     await writeList(GUEST_KEYS.histories, next);
-    return;
-  }
-  await requestJson('/api/user/histories', { method: 'POST', body: entry });
+  });
+  if (guest) return;
+  await requestJson('/api/user/histories', { method: 'POST', body: entry, timeoutMs: WRITE_TIMEOUT_MS });
 };
 
 export const clearHistories = async (): Promise<void> => {
@@ -127,24 +152,32 @@ export const isFavorite = async (menuName: string): Promise<boolean> =>
  * 게스트가 즐겨찾기를 늘리면 로그인 안내(바텀시트)를 띄울지 loginPrompt가 판단한다.
  */
 export const toggleFavorite = async (item: NewFavorite): Promise<{ favorited: boolean; count: number }> => {
-  const guest = await isGuest();
-  const list = await getFavorites();
-  const exists = list.some(f => f.menuName === item.menuName);
-
-  if (guest) {
+  const guest = await whenGuest(async () => {
+    const list = await readListStrict<FavoriteEntry>(GUEST_KEYS.favorites);
+    const exists = list.some(f => f.menuName === item.menuName);
     const next = exists
       ? list.filter(f => f.menuName !== item.menuName)
       : [{ ...item, createdAt: new Date().toISOString() }, ...list];
     await writeList(GUEST_KEYS.favorites, next);
-  } else if (exists) {
-    await requestJson('/api/user/favorites', { method: 'DELETE', body: { menuName: item.menuName } });
-  } else {
-    await requestJson('/api/user/favorites', { method: 'POST', body: item });
+    return { favorited: !exists, count: next.length };
+  });
+  if (guest) {
+    if (guest.value.favorited) notifyFavoriteSaved(guest.value.count);
+    return guest.value;
   }
 
-  const result = { favorited: !exists, count: list.length + (exists ? -1 : 1) };
-  if (guest && result.favorited) notifyFavoriteSaved(result.count);
-  return result;
+  const list = await getFavorites();
+  const exists = list.some(f => f.menuName === item.menuName);
+  if (exists) {
+    await requestJson('/api/user/favorites', {
+      method: 'DELETE',
+      body: { menuName: item.menuName },
+      timeoutMs: WRITE_TIMEOUT_MS,
+    });
+  } else {
+    await requestJson('/api/user/favorites', { method: 'POST', body: item, timeoutMs: WRITE_TIMEOUT_MS });
+  }
+  return { favorited: !exists, count: list.length + (exists ? -1 : 1) };
 };
 
 // --- 기피 태그 ---
@@ -157,11 +190,13 @@ export const getAvoidTags = async (): Promise<string[]> => {
 
 export const setAvoidTags = async (tags: string[]): Promise<string[]> => {
   const clean = parseAvoidTags(tags);
-  if (await isGuest()) {
-    await AsyncStorage.setItem(GUEST_KEYS.avoidTags, clean.join(','));
-    return clean;
-  }
-  const data = await requestJson('/api/user/avoid-tags', { method: 'PUT', body: { avoidTags: clean.join(',') } });
+  const guest = await whenGuest(() => AsyncStorage.setItem(GUEST_KEYS.avoidTags, clean.join(',')));
+  if (guest) return clean;
+  const data = await requestJson('/api/user/avoid-tags', {
+    method: 'PUT',
+    body: { avoidTags: clean.join(',') },
+    timeoutMs: WRITE_TIMEOUT_MS,
+  });
   return parseAvoidTags(data.avoidTags);
 };
 
@@ -190,13 +225,14 @@ export interface GuestImportResult {
  * 로그인 직후(토큰 저장 후) 부른다. 기기에 남은 게스트 기록을 서버로 옮기고, 성공하면 기기 쪽을 비운다.
  * 실패하면 기기 기록을 그대로 두므로 다음 앱 실행 때 다시 시도된다. 서버는 같은 기록을 두 번 받아도 한 번만 저장한다.
  */
-export const importGuestData = async (): Promise<GuestImportResult> => {
+export const importGuestData = (): Promise<GuestImportResult> => withGuestLock(async () => {
   const none = { imported: false, histories: 0, favorites: 0 };
   if (await isGuest()) return none;
 
   const [histories, favorites, rawTags] = await Promise.all([
-    readList<HistoryEntry>(GUEST_KEYS.histories),
-    readList<FavoriteEntry>(GUEST_KEYS.favorites),
+    // 읽지 못한 목록을 빈 목록으로 보고 지워 버리지 않도록 오류를 그대로 던진다
+    readListStrict<HistoryEntry>(GUEST_KEYS.histories),
+    readListStrict<FavoriteEntry>(GUEST_KEYS.favorites),
     AsyncStorage.getItem(GUEST_KEYS.avoidTags),
   ]);
   const avoidTags = parseAvoidTags(rawTags);
@@ -215,7 +251,7 @@ export const importGuestData = async (): Promise<GuestImportResult> => {
     favorites: data.imported?.favorites ?? 0,
     avoidTags: parseAvoidTags(data.avoidTags),
   };
-};
+});
 
 // --- 회원 탈퇴 ---
 

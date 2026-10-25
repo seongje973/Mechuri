@@ -9,6 +9,15 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
 }));
 
+jest.mock('../../storage/userData', () => ({
+  addHistory: jest.fn(async () => {}),
+  getAvoidTags: jest.fn(async () => []),
+  getFavorites: jest.fn(async () => []),
+  getHistories: jest.fn(async () => []),
+  isFavorite: jest.fn(async () => false),
+  toggleFavorite: jest.fn(async () => ({ favorited: true, count: 1 })),
+}));
+
 jest.mock('../../api/client', () => ({
   apiFetch: jest.fn(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) })),
   getStoredProfile: jest.fn(async () => null),
@@ -85,7 +94,7 @@ describe('RecommendScreen', () => {
   };
 
   const shownTop = () => {
-    const node = screen.getByText(/!$/);
+    const node = screen.getByTestId('reveal-name');
     return String(([] as unknown[]).concat(node.props.children).join('')).replace(/!$/, '');
   };
 
@@ -123,10 +132,24 @@ describe('RecommendScreen', () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+    // 게스트도 기록이 저장된다 (저장소가 기기/서버를 고른다)
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    expect(addHistory).toHaveBeenCalledWith(expect.objectContaining({ menuName: shownTop() }));
   });
 
-  it('로그인 상태에서 기록 저장이 실패하면 먹을래요가 다시 눌리는 상태로 남는다', async () => {
-    const { apiFetch } = jest.requireMock('../../api/client');
+  it('즐겨찾기를 못 읽어도 최근 먹은 기록 감점은 적용된다', async () => {
+    await reachReveal();
+    const first = shownTop();
+    screen.unmount();
+
+    const { getFavorites, getHistories } = jest.requireMock('../../storage/userData');
+    getFavorites.mockRejectedValueOnce(new Error('favorites failed'));
+    getHistories.mockResolvedValueOnce([{ menuName: first, createdAt: Date.now() }]);
+    await reachReveal();
+    expect(shownTop()).not.toBe(first);
+  });
+
+  it('기록 저장이 실패하면 먹을래요가 다시 눌리는 상태로 남는다', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
     await act(async () => {
@@ -137,7 +160,8 @@ describe('RecommendScreen', () => {
         fireEvent.press(screen.getByText('👍 예'));
       });
     }
-    apiFetch.mockImplementationOnce(async () => ({ ok: false, status: 500, json: async () => ({}) }));
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    addHistory.mockRejectedValueOnce(new Error('POST /api/user/histories failed (500)'));
     await act(async () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
@@ -147,34 +171,84 @@ describe('RecommendScreen', () => {
   });
 
   it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
-    const { apiFetch } = jest.requireMock('../../api/client');
-    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
-    await act(async () => {
-      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
-    });
-    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
-      await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
-      });
-    }
-    let finish!: (v: unknown) => void;
-    apiFetch.mockClear();
-    apiFetch.mockImplementationOnce(() => new Promise(r => (finish = r)));
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finish!: () => void;
+    addHistory.mockClear();
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finish = r)));
     await act(async () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
     await act(async () => {
-      finish({ ok: true, status: 201, json: async () => ({}) });
+      finish();
     });
-    const posts = apiFetch.mock.calls.filter((c: any[]) => c[0] === '/api/user/histories');
-    expect(posts).toHaveLength(1);
+    expect(addHistory).toHaveBeenCalledTimes(1);
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
 
-  it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
-    const { apiFetch } = jest.requireMock('../../api/client');
-    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
+  it('하트를 누른 뒤 늦게 온 이전 조회 결과가 하트를 되돌리지 않는다', async () => {
+    const { isFavorite } = jest.requireMock('../../storage/userData');
+    let lookup!: (v: boolean) => void;
+    isFavorite.mockImplementation(() => new Promise(r => (lookup = r)));
+    await reachReveal();
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    expect(screen.getByText('❤️')).toBeTruthy();
+    await act(async () => {
+      lookup(false);
+    });
+    expect(screen.getByText('❤️')).toBeTruthy();
+    isFavorite.mockImplementation(async () => false);
+  });
+
+  it('하트를 두 번 눌러 두 번째 저장만 실패하면 실제 저장 상태로 하트를 맞춘다', async () => {
+    const { toggleFavorite, isFavorite } = jest.requireMock('../../storage/userData');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await reachReveal();
+    toggleFavorite.mockResolvedValueOnce({ favorited: true, count: 1 }).mockRejectedValueOnce(new Error('offline'));
+    isFavorite.mockResolvedValueOnce(true);
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    expect(screen.getByText('❤️')).toBeTruthy();
+    expect(alert).toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  it('하트를 빠르게 연달아 눌러도 저장은 하나씩 차례로 한다', async () => {
+    const { toggleFavorite } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    toggleFavorite.mockClear();
+    let finishFirst!: (v: { favorited: boolean; count: number }) => void;
+    toggleFavorite.mockImplementationOnce(() => new Promise(r => (finishFirst = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    // 첫 저장이 끝나기 전에는 두 번째 저장을 시작하지 않는다
+    expect(toggleFavorite).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finishFirst({ favorited: true, count: 1 });
+    });
+    expect(toggleFavorite).toHaveBeenCalledTimes(2);
+  });
+
+  it('이전 판의 저장이 새 판에서 늦게 끝나도 새 판의 먹을래요 버튼은 그대로다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finishOld!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishOld = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
     await act(async () => {
       fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
     });
@@ -183,9 +257,36 @@ describe('RecommendScreen', () => {
         fireEvent.press(screen.getByText('👍 예'));
       });
     }
-    apiFetch.mockClear();
-    let finishFirst!: (v: unknown) => void;
-    apiFetch.mockImplementationOnce(() => new Promise(r => (finishFirst = r)));
+    await act(async () => {
+      finishOld();
+    });
+    expect(screen.getByText('이거 먹을래요')).toBeTruthy();
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+  });
+
+  it('지도보기로 식당을 살펴보기만 하면 먹은 기록을 남기지 않는다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    apiFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ restaurants: [{ name: '진짜식당', distance: '350m', category: '한식', rating: 4.5, type: '식당', url: '', address: '서울', latitude: 37.5, longitude: 127 }], histories: [] }),
+    }));
+    const navigate = await reachReveal();
+    addHistory.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('지도보기 ➔'));
+    });
+    expect(navigate).toHaveBeenCalledWith('지도', expect.objectContaining({ restaurant: expect.objectContaining({ name: '진짜식당' }) }));
+    expect(addHistory).not.toHaveBeenCalled();
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+  });
+
+  it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    addHistory.mockClear();
+    let finishFirst!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishFirst = r)));
     await act(async () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
@@ -196,13 +297,13 @@ describe('RecommendScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
-    const saved = apiFetch.mock.calls.filter((c: any[]) => c[0] === '/api/user/histories').map((c: any[]) => c[1].body.menuName);
+    const saved = addHistory.mock.calls.map((c: any[]) => c[0].menuName);
     expect(saved).toHaveLength(2);
     expect(saved[1]).toBe(altName);
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
     // 먼저 누른 메뉴의 저장이 늦게 끝나도 지금 메뉴의 완료 표시는 그대로다
     await act(async () => {
-      finishFirst({ ok: true, status: 201, json: async () => ({}) });
+      finishFirst();
     });
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
