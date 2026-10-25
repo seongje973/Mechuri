@@ -1,10 +1,13 @@
 import { MENU_DATA, MenuItem } from '../../constants/menuData';
 import { QUESTIONS, Question } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
-import { MAX_QUESTIONS, ScoreAnswer } from '../config';
+import { MAX_QUESTIONS, RETRY_EXTRA_QUESTIONS, RETRY_MIN_QUESTIONS, RETRY_WORLDCUP_SIZE, ScoreAnswer } from '../config';
 import {
   RecommendSession,
   answerQuestion,
+  canReject,
+  rejectTopResult,
+  worldCupCandidates,
   getResults,
   pickNextQuestion,
   shouldStop,
@@ -127,5 +130,63 @@ describe('결과와 추천 이유 (US-12)', () => {
   it('아무 답도 점수를 올리지 않았으면 나라별 분류를 이유로 보여준다', () => {
     const results = getResults(start(), QUESTIONS);
     results.forEach(r => expect(r.reasons).toEqual([r.item.category]));
+  });
+});
+
+describe('"틀렸어요"로 다시 좁히기 (US-15)', () => {
+  const ANSWER_SETS: ScoreAnswer[][] = [
+    ['yes', 'no', 'yes', 'no', 'yes', 'no', 'yes'],
+    ['no', 'no', 'yes', 'yes', 'probably', 'no', 'dontcare'],
+    ['dontcare', 'yes', 'yes', 'yes', 'yes', 'yes', 'yes'],
+    ['no', 'no', 'no', 'no', 'no', 'no', 'no'],
+  ];
+
+  it.each(ANSWER_SETS.map((a, i) => [i, a] as const))('답 세트 %i: 틀렸어요 뒤 같은 메뉴가 다시 1위로 나오지 않는다', (_i, answers) => {
+    const first = run((_q, i) => answers[i % answers.length]).session;
+    const top = getResults(first, QUESTIONS)[0].item.name;
+
+    const retried = run((_q, i) => answers[i % answers.length], rejectTopResult(first, top)).session;
+    const results = getResults(retried, QUESTIONS);
+    expect(results.map(r => r.item.name)).not.toContain(top);
+    expect(retried.rejected).toEqual([top]);
+  });
+
+  it('틀렸어요 뒤 질문은 최소 2개, 최대 3개 (남은 질문이 있으면)', () => {
+    const first = run(() => 'yes').session;
+    const before = first.answers.length;
+    const retried = run(() => 'yes', rejectTopResult(first, getResults(first, QUESTIONS)[0].item.name)).session;
+    const extra = retried.answers.length - before;
+    expect(extra).toBeLessThanOrEqual(RETRY_EXTRA_QUESTIONS);
+    const remaining = QUESTIONS.length - before;
+    if (remaining >= RETRY_MIN_QUESTIONS) expect(extra).toBeGreaterThanOrEqual(1);
+  });
+
+  it('1위가 크게 앞서도 틀렸어요 직후에는 바로 멈추지 않는다', () => {
+    let s = start();
+    s = answerQuestion(s, q('cuisine-korean'), 'yes');
+    s = answerQuestion(s, q('soup'), 'yes');
+    const top = getResults(s, QUESTIONS)[0].item.name;
+    const retried = rejectTopResult(s, top);
+    expect(retried.minAnswers).toBe(s.answers.length + RETRY_MIN_QUESTIONS);
+    expect(shouldStop(retried, QUESTIONS)).toBe(false);
+  });
+
+  it('후보가 1개뿐이면 뺄 수 없다', () => {
+    const one = start([byName('김치찌개')]);
+    expect(canReject(one)).toBe(false);
+    expect(rejectTopResult(one, '김치찌개')).toBe(one);
+  });
+
+  it('월드컵 후보는 뺀 메뉴를 제외한 상위 4개', () => {
+    let s = run(() => 'yes').session;
+    const a = getResults(s, QUESTIONS)[0].item.name;
+    s = rejectTopResult(s, a);
+    const b = getResults(s, QUESTIONS)[0].item.name;
+    s = rejectTopResult(s, b);
+    const cup = worldCupCandidates(s);
+    expect(cup).toHaveLength(RETRY_WORLDCUP_SIZE);
+    expect(cup.map(m => m.name)).not.toContain(a);
+    expect(cup.map(m => m.name)).not.toContain(b);
+    expect(new Set(cup.map(m => m.name)).size).toBe(RETRY_WORLDCUP_SIZE);
   });
 });
