@@ -156,6 +156,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     })();
   }, []);
 
+  // 화면이 사라지면 진행 중이던 판을 끝낸다. 늦게 끝난 비동기 작업이 결과 이벤트를 보내지 않는다
+  useEffect(() => () => {
+    analyticsSessionRef.current = null;
+  }, []);
+
   // 홈의 "바로 추천"은 autoStart 값을 바꿔 보낸다. 인트로를 건너뛰고 첫 질문부터 시작한다
   const autoStart = route?.params?.autoStart;
   useEffect(() => {
@@ -365,8 +370,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const handleReject = () => {
     const top = results[0];
     if (!session || !top || !canReject(session)) return;
-    track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: session.rejected.length } });
     const next = rejectTopResult(session, top.item.name);
+    // retries는 이번 것을 포함한 "틀렸어요" 횟수. 뒤따르는 result_shown의 retries와 같다
+    track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: next.rejected.length } });
     setHistory([]);
     setSession(next);
     setSelectedMenu(null);
@@ -443,13 +449,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   const handleOpenBaemin = async (menuName: string) => {
+    const analyticsSession = analyticsSessionRef.current;
     const opened = await openDelivery(menuName);
     if (opened === 'failed') {
       Alert.alert("배달 앱을 열지 못했어요", "배달의민족 앱이나 브라우저를 확인해 주세요.");
       return;
     }
     // 배달 앱이나 웹을 실제로 연 경우만 수락으로 센다
-    trackAccept('delivery', menuName);
+    trackAccept('delivery', menuName, analyticsSession);
   };
 
   // "근처 식당" (US-20): 지도 탭에서 이 메뉴로 반경 1.5km 검색

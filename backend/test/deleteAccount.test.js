@@ -23,14 +23,22 @@ const fakeDb = (users) => {
     },
     History: table('History', 5),
     Favorite: table('Favorite', 2),
-    Event: table('Event', 7)
+    Event: table('Event', 7),
+    Participant: {
+      update: async (values, { where, transaction: t }) => {
+        assert.strictEqual(t, transaction);
+        assert.deepStrictEqual(values, { userId: null, avoidTags: '' });
+        calls.push(['Participant', where.userId]);
+        return [3];
+      }
+    }
   };
 };
 
 test('deletes the account and everything tied to it in one transaction', async () => {
   const db = fakeDb([1]);
-  assert.deepStrictEqual(await deleteAccount({ userId: 1, ...db }), { histories: 5, favorites: 2, events: 7 });
-  assert.deepStrictEqual(db.calls, [['History', 1], ['Favorite', 1], ['Event', 1], ['User', 1]]);
+  assert.deepStrictEqual(await deleteAccount({ userId: 1, ...db }), { histories: 5, favorites: 2, events: 7, participants: 3 });
+  assert.deepStrictEqual(db.calls, [['History', 1], ['Favorite', 1], ['Event', 1], ['Participant', 1], ['User', 1]]);
 });
 
 test('unknown account deletes nothing', async () => {
