@@ -48,7 +48,7 @@ const Room = sequelize.define('Room', {
   }
 }, {
   timestamps: true,
-  indexes: [{ fields: ['code'] }]
+  indexes: [{ fields: ['code'] }, { fields: ['expiresAt'] }]
 });
 
 const generateRoomCode = (randomInt = crypto.randomInt) =>
