@@ -214,6 +214,39 @@ describe('RecommendScreen', () => {
     expect(screen.getByText('👍 예')).toBeTruthy();
   });
 
+  it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finish!: () => void;
+    addHistory.mockClear();
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finish = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      finish();
+    });
+    expect(addHistory).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+  });
+
+  it('하트를 누른 뒤 늦게 온 이전 조회 결과가 하트를 되돌리지 않는다', async () => {
+    const { isFavorite } = jest.requireMock('../../storage/userData');
+    let lookup!: (v: boolean) => void;
+    isFavorite.mockImplementation(() => new Promise(r => (lookup = r)));
+    await reachReveal();
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    expect(screen.getByText('❤️')).toBeTruthy();
+    await act(async () => {
+      lookup(false);
+    });
+    expect(screen.getByText('❤️')).toBeTruthy();
+    isFavorite.mockImplementation(async () => false);
+  });
+
   describe('날씨 보정 (L-02)', () => {
     const Location = jest.requireMock('expo-location');
     const { apiFetch } = jest.requireMock('../../api/client');
