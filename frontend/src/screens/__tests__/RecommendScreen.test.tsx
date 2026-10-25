@@ -189,6 +189,30 @@ describe('RecommendScreen', () => {
     expect(track.mock.calls.every((c: any[]) => c[0] === 'session-test-0001')).toBe(true);
   });
 
+  it('저장이 끝나기 전에 새 추천을 시작해도 먹을래요는 누른 판의 세션으로 기록한다', async () => {
+    const { track, newSessionId } = jest.requireMock('../../analytics/events');
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    newSessionId.mockReturnValueOnce('session-old').mockReturnValueOnce('session-new');
+    await reachReveal();
+    const top = shownTop();
+    let finishSave!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishSave = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    track.mockClear();
+    await act(async () => {
+      finishSave();
+    });
+    expect(track).toHaveBeenCalledWith('session-old', { type: 'accept', payload: { action: 'eat', menu: top } });
+  });
+
   it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();

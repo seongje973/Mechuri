@@ -97,8 +97,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const selectedNameRef = useRef<string | null>(null);
   // 지표용 추천 세션 ID (US-23). 추천 한 판마다 새로 만든다
   const analyticsSessionRef = useRef<string | null>(null);
-  const trackAccept = (action: AcceptAction, menu: string) =>
-    track(analyticsSessionRef.current, { type: 'accept', payload: { action, menu } });
+  // 저장을 기다리는 동작은 누른 순간의 세션을 넘긴다. 그사이 새 추천을 시작해도 이전 판에 기록된다
+  const trackAccept = (action: AcceptAction, menu: string, sessionId = analyticsSessionRef.current) =>
+    track(sessionId, { type: 'accept', payload: { action, menu } });
   // 하트 조회·토글마다 올라가는 번호. 늦게 온 이전 결과가 하트를 되돌리지 않게 한다
   const favoriteOpRef = useRef(0);
   // 하트 저장은 하나씩 차례로 한다. 게스트 목록은 읽고-고쳐-쓰기라 겹치면 앞 변경이 사라진다
@@ -267,8 +268,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const finishAkinator = async (finalSession: RecommendSession) => {
     setCurrentQuestion(null);
+    const analyticsSession = analyticsSessionRef.current;
     // "틀렸어요" 뒤에는 처음 불러온 보정값을 그대로 쓴다
     const adj = finalSession.rejected.length > 0 ? adjustments : await loadAdjustments();
+    // 보정값을 읽는 사이 새 추천을 시작했으면 이전 판 결과를 띄우지 않는다
+    if (analyticsSessionRef.current !== analyticsSession) return;
     setAdjustments(adj);
     showResults(getResults(finalSession, QUESTIONS, adj), finalSession);
   };
@@ -384,10 +388,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const handleEatThis = async (menu: MenuItem) => {
     if (savingMenusRef.current.has(menu.name)) return;
     savingMenusRef.current.add(menu.name);
+    const analyticsSession = analyticsSessionRef.current;
     try {
       await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
       setEatenMenus(prev => (prev.includes(menu.name) ? prev : [...prev, menu.name]));
-      trackAccept('eat', menu.name);
+      trackAccept('eat', menu.name, analyticsSession);
     } catch (e) {
       console.log("Failed to save eaten history", e);
       Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
@@ -401,6 +406,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (!selectedMenu) return;
     const menuName = selectedMenu.name;
     const favoriteOp = ++favoriteOpRef.current;
+    const analyticsSession = analyticsSessionRef.current;
     const item = { menuName, emoji: selectedMenu.emoji, category: selectedMenu.category };
     const saving = favoriteQueueRef.current.then(() => toggleFavorite(item));
     favoriteQueueRef.current = saving.catch(() => undefined);
@@ -408,7 +414,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       const { favorited } = await saving;
       // 저장하는 사이 다른 메뉴를 골랐거나 다시 조회했으면 덮어쓰지 않는다
       if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) setFavorited(favorited);
-      if (favorited) trackAccept('favorite', menuName);
+      if (favorited) trackAccept('favorite', menuName, analyticsSession);
     } catch (e) {
       Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
     }

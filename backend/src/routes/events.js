@@ -80,6 +80,8 @@ const readOptionalUserId = (req, jwtSecret) => {
  * 이벤트마다 eventId(선택)를 주면 (deviceId, eventId)가 같은 재전송은 한 번만 저장된다.
  * 하나라도 잘못되면 아무것도 저장하지 않는다.
  */
+const countInserted = (created) => (created || []).filter((row) => row && row.id != null).length;
+
 const createEventsRouter = ({ Event = require('../models/Event'), jwtSecret = process.env.JWT_SECRET } = {}) => {
   const router = express.Router();
 
@@ -105,14 +107,16 @@ const createEventsRouter = ({ Event = require('../models/Event'), jwtSecret = pr
     try {
       // 같은 기기에서 같은 eventId가 다시 오면(재전송) 건너뛴다
       const options = { ignoreDuplicates: true };
+      let created;
       try {
-        await Event.bulkCreate(rows, options);
+        created = await Event.bulkCreate(rows, options);
       } catch (error) {
         // 토큰은 유효한데 계정이 지워진 경우: 게스트 기록으로 남긴다
         if (error.name !== 'SequelizeForeignKeyConstraintError' || context.userId === null) throw error;
-        await Event.bulkCreate(rows.map((row) => ({ ...row, userId: null })), options);
+        created = await Event.bulkCreate(rows.map((row) => ({ ...row, userId: null })), options);
       }
-      return res.status(201).json({ saved: rows.length });
+      // Postgres는 건너뛴 행을 돌려주지 않아 id가 붙은 개수가 실제로 저장된 수다
+      return res.status(201).json({ saved: countInserted(created) });
     } catch (error) {
       console.error('❌ Event Save Error:', error.message);
       return res.status(500).json({ error: 'Failed to save events.' });
