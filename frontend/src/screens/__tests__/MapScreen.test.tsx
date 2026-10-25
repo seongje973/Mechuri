@@ -1,4 +1,5 @@
 import React from 'react';
+import { TouchableOpacity } from 'react-native';
 import MapScreen from '../MapScreen';
 import { apiFetch } from '../../api/client';
 
@@ -140,6 +141,42 @@ describe('MapScreen', () => {
     expect(allText(renderer)).toContain('강남역 중심 (권한 미승인)');
     expect(allText(renderer)).not.toContain('실시간 GPS');
     expect(requestedKeywords()).toEqual(['초밥']);
+  });
+
+  it('서버 오류면 가짜 식당 대신 오류와 다시 시도를 보여주고, 다시 시도하면 다시 찾는다', async () => {
+    mockedFetch.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    const { renderer } = await renderMap({ keyword: '김치찌개', requestedAt: 1 });
+    expect(allText(renderer)).toContain('식당 정보를 불러오지 못했어요.');
+    expect(allText(renderer)).not.toContain('반경 1.5km 안에');
+    expect(renderer.root.findAll((n: Node) => n.type === 'Text' && n.children.includes('⭐ 4.8'))).toHaveLength(0);
+
+    mockedFetch.mockResolvedValueOnce(okResponse(['김치찌개 명가']));
+    const retry = renderer.root
+      .findAllByType(TouchableOpacity)
+      .find((b: any) => b.findAll((n: Node) => n.type === 'Text' && n.children.includes('다시 시도')).length > 0);
+    await act(async () => {
+      retry.props.onPress();
+    });
+    expect(requestedKeywords()).toEqual(['김치찌개', '김치찌개']);
+    expect(allText(renderer)).toContain('김치찌개 명가');
+    expect(allText(renderer)).not.toContain('불러오지 못했어요');
+  });
+
+  it('네트워크가 끊겨도 가짜 식당을 보여주지 않는다', async () => {
+    mockedFetch.mockRejectedValueOnce(new Error('offline'));
+    const { renderer } = await renderMap();
+    expect(allText(renderer)).toContain('식당 정보를 불러오지 못했어요.');
+    expect(allText(renderer)).not.toContain('곰탕');
+  });
+
+  it('GPS가 실패해도 기본 위치로 검색한다', async () => {
+    const Location = require('expo-location');
+    Location.requestForegroundPermissionsAsync.mockRejectedValueOnce(new Error('location off'));
+    mockedFetch.mockResolvedValue(okResponse(['동네 맛집']));
+    const { renderer } = await renderMap();
+    expect(requestedKeywords()).toEqual(['맛집']);
+    expect(allText(renderer)).toContain('동네 맛집');
+    expect(allText(renderer)).toContain('위치 확인 실패');
   });
 
   it('검색 결과가 없으면 안내 문구를 보여준다', async () => {

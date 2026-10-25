@@ -40,6 +40,8 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
   const [loading, setLoading] = useState(true);
   const [locationName, setLocationName] = useState<string>('위치 스캔 중...');
   const [activeIndex, setActiveIndex] = useState<number>(0);
+  // 서버에서 식당을 못 받아오면 가짜 식당 대신 오류와 다시 시도 버튼을 보여준다
+  const [loadError, setLoadError] = useState(false);
 
   const mapRef = useRef<MapView>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -83,27 +85,35 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
     const requestId = ++requestIdRef.current;
     const isStale = () => requestId !== requestIdRef.current;
     setLoading(true);
+    setLoadError(false);
     setActiveIndex(0);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (isStale()) return;
       let lat = 37.497942; // Gangnam default
       let lng = 127.0276197;
 
-      if (status === 'granted') {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
+      // GPS가 꺼져 있거나 실패해도 기본 위치로 검색은 계속한다
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (isStale()) return;
-        setUserCoords({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        });
-        lat = location.coords.latitude;
-        lng = location.coords.longitude;
-        setLocationName('내 위치 (실시간 GPS)');
-      } else {
-        setLocationName('강남역 중심 (권한 미승인)');
+        if (status === 'granted') {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced
+          });
+          if (isStale()) return;
+          setUserCoords({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude
+          });
+          lat = location.coords.latitude;
+          lng = location.coords.longitude;
+          setLocationName('내 위치 (실시간 GPS)');
+        } else {
+          setLocationName('강남역 중심 (권한 미승인)');
+        }
+      } catch (locationError) {
+        if (isStale()) return;
+        console.log('⚠️ Location unavailable, searching around default:', locationError);
+        setLocationName('강남역 중심 (위치 확인 실패)');
       }
 
       // Fetch nearby eateries (서버가 반경 1.5km 안에서 찾는다)
@@ -112,21 +122,16 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 
       const response = await apiFetch(url);
       if (isStale()) return;
-      if (response.ok) {
-        const data = await response.json();
-        if (isStale()) return;
-        setRestaurantsList(data.restaurants || []);
-      } else {
-        setRestaurantsList(getFallbackRestaurants(lat, lng));
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (isStale()) return;
+      setRestaurantsList(data.restaurants || []);
       focusRegion(lat, lng);
     } catch (error) {
       if (isStale()) return;
-      console.log('❌ MapScreen load failed, using fallbacks:', error);
-      // Fallback with current position offsets
-      const fallbackLat = userCoords?.latitude || 37.497942;
-      const fallbackLng = userCoords?.longitude || 127.0276197;
-      setRestaurantsList(getFallbackRestaurants(fallbackLat, fallbackLng));
+      console.log('❌ MapScreen load failed:', error);
+      setRestaurantsList([]);
+      setLoadError(true);
     } finally {
       if (!isStale()) setLoading(false);
     }
@@ -145,15 +150,6 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 
   const clearKeyword = () => {
     navigation?.setParams?.({ keyword: undefined, requestedAt: Date.now() });
-  };
-
-  const getFallbackRestaurants = (lat: number, lng: number): Restaurant[] => {
-    return [
-      { name: '장수 가마솥 곰탕', rating: '⭐ 4.8', distance: '120m', category: '한식', url: 'https://m.map.kakao.com', address: '서울시 마포구 독막로 12', latitude: lat + 0.0012, longitude: lng - 0.0015, type: '주변 추천' },
-      { name: '풍성한 숯불 갈비', rating: '⭐ 4.7', distance: '340m', category: '고기구이', url: 'https://m.map.kakao.com', address: '서울시 마포구 독막로 28', latitude: lat - 0.0018, longitude: lng + 0.0011, type: '인기 매장' },
-      { name: '스시 마스터 초밥', rating: '⭐ 4.6', distance: '480m', category: '일식', url: 'https://m.map.kakao.com', address: '서울시 마포구 토정로 45', latitude: lat + 0.0009, longitude: lng + 0.0017, type: '리뷰 인기' },
-      { name: '나폴리 화덕 피자', rating: '⭐ 4.5', distance: '650m', category: '양식', url: 'https://m.map.kakao.com', address: '서울시 마포구 와우산로 88', latitude: lat - 0.0014, longitude: lng - 0.0013, type: '데이트 명소' },
-    ];
   };
 
   const focusOnRestaurant = (res: Restaurant, index: number) => {
@@ -280,7 +276,15 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 
         {/* Bottom Restaurants Card Panel */}
         <View style={styles.bottomPanel}>
-          {!loading && restaurantsList.length === 0 ? (
+          {!loading && loadError ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요.</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => loadNearbyRestaurants(keyword)}>
+                <Text style={styles.retryBtnText}>다시 시도</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {!loading && !loadError && restaurantsList.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyText}>
                 {keyword ? `반경 1.5km 안에 ${keyword} 식당이 없어요.` : '주변에서 식당을 찾지 못했어요.'}
@@ -395,6 +399,18 @@ const styles = StyleSheet.create({
     color: '#a8a29e',
     fontSize: 13,
     fontWeight: '600',
+  },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: '#fbbf24',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  retryBtnText: {
+    color: '#1c1917',
+    fontSize: 13,
+    fontWeight: '800',
   },
   refreshBtn: {
     padding: 2,
