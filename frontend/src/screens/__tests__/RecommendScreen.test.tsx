@@ -69,4 +69,59 @@ describe('RecommendScreen', () => {
     expect(await screen.findByText('질문 1 / 7')).toBeTruthy();
     expect(screen.queryByText('추리 퀴즈 시작하기 ➔')).toBeNull();
   });
+
+  const reachReveal = async (navigate = jest.fn()) => {
+    render(<RecommendScreen navigation={{ navigate }} isLoggedIn={false} userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    return navigate;
+  };
+
+  const shownTop = () => {
+    const node = screen.getByText(/!$/);
+    return String(([] as unknown[]).concat(node.props.children).join('')).replace(/!$/, '');
+  };
+
+  it('틀렸어요를 누르면 같은 메뉴가 다시 1위로 나오지 않고, 두 번째엔 월드컵을 제안한다', async () => {
+    await reachReveal();
+    const first = shownTop();
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('틀렸어요 🙅'));
+    });
+    for (let i = 0; i < 5 && !screen.queryByText('그렇다면 이 메뉴는…'); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    expect(screen.getByText('그렇다면 이 메뉴는…')).toBeTruthy();
+    expect(shownTop()).not.toBe(first);
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('또 틀렸어요, 월드컵으로 정할래요'));
+    });
+    expect(screen.getByText('메추리가 헷갈려요. 직접 골라 주세요!')).toBeTruthy();
+  });
+
+  it('근처 식당은 지도 탭에 메뉴 이름을 넘긴다', async () => {
+    const navigate = await reachReveal();
+    const top = shownTop();
+    fireEvent.press(screen.getByText('근처 식당'));
+    expect(navigate).toHaveBeenCalledWith('지도', expect.objectContaining({ keyword: top }));
+  });
+
+  it('이거 먹을래요를 누르면 확인 문구로 바뀐다', async () => {
+    await reachReveal();
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+  });
 });
+
