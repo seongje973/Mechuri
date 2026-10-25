@@ -167,6 +167,16 @@ describe('게스트 저장소', () => {
     expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBe('{깨진 JSON');
   });
 
+  it('기기 즐겨찾기를 읽지 못하면 이관하지 않고 기기 기록을 남긴다', async () => {
+    await addHistory({ menuName: '김치찌개' });
+    await AsyncStorage.setItem(GUEST_KEYS.favorites, '{깨진 JSON');
+    await saveSession('jwt-1', { id: 1 });
+    await expect(importGuestData()).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.histories)).not.toBeNull();
+    expect(await AsyncStorage.getItem(GUEST_KEYS.favorites)).toBe('{깨진 JSON');
+  });
+
   it('이관이 실패하면 기기 기록을 남겨 다음에 다시 시도할 수 있다', async () => {
     await addHistory({ menuName: '김치찌개' });
     await saveSession('jwt-1', { id: 1 });

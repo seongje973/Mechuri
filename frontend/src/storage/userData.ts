@@ -173,15 +173,16 @@ export const getAvoidTags = async (): Promise<string[]> => {
   return parseAvoidTags(data.avoidTags);
 };
 
-export const setAvoidTags = async (tags: string[]): Promise<string[]> => {
-  const clean = parseAvoidTags(tags);
-  if (await isGuest()) {
-    await AsyncStorage.setItem(GUEST_KEYS.avoidTags, clean.join(','));
-    return clean;
-  }
-  const data = await requestJson('/api/user/avoid-tags', { method: 'PUT', body: { avoidTags: clean.join(',') } });
-  return parseAvoidTags(data.avoidTags);
-};
+export const setAvoidTags = (tags: string[]): Promise<string[]> =>
+  withGuestLock(async () => {
+    const clean = parseAvoidTags(tags);
+    if (await isGuest()) {
+      await AsyncStorage.setItem(GUEST_KEYS.avoidTags, clean.join(','));
+      return clean;
+    }
+    const data = await requestJson('/api/user/avoid-tags', { method: 'PUT', body: { avoidTags: clean.join(',') } });
+    return parseAvoidTags(data.avoidTags);
+  });
 
 // --- 통계 ---
 
@@ -213,8 +214,9 @@ export const importGuestData = (): Promise<GuestImportResult> => withGuestLock(a
   if (await isGuest()) return none;
 
   const [histories, favorites, rawTags] = await Promise.all([
-    readList<HistoryEntry>(GUEST_KEYS.histories),
-    readList<FavoriteEntry>(GUEST_KEYS.favorites),
+    // 읽지 못한 목록을 빈 목록으로 보고 지워 버리지 않도록 오류를 그대로 던진다
+    readListStrict<HistoryEntry>(GUEST_KEYS.histories),
+    readListStrict<FavoriteEntry>(GUEST_KEYS.favorites),
     AsyncStorage.getItem(GUEST_KEYS.avoidTags),
   ]);
   const avoidTags = parseAvoidTags(rawTags);
