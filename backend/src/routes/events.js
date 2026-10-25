@@ -44,13 +44,14 @@ const resolveOccurredAt = (value, now) => {
 const normalizeEvent = (raw, { deviceId: defaultDeviceId, userId = null, now = new Date() } = {}) => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'Event must be an object.' };
 
-  const { type, sessionId, occurredAt } = raw;
+  const { type, sessionId, occurredAt, eventId = null } = raw;
   const deviceId = raw.deviceId ?? defaultDeviceId;
   const payload = raw.payload ?? {};
 
   if (!EVENT_TYPES.includes(type)) return { error: `type must be one of ${EVENT_TYPES.join(', ')}.` };
   if (typeof sessionId !== 'string' || !ID_PATTERN.test(sessionId)) return { error: 'sessionId is invalid.' };
   if (typeof deviceId !== 'string' || !ID_PATTERN.test(deviceId)) return { error: 'deviceId is invalid.' };
+  if (eventId !== null && (typeof eventId !== 'string' || !ID_PATTERN.test(eventId))) return { error: 'eventId is invalid.' };
   if (typeof payload !== 'object' || Array.isArray(payload)) return { error: 'payload must be an object.' };
   if (JSON.stringify(payload).length > MAX_PAYLOAD_CHARS) return { error: 'payload is too large.' };
 
@@ -58,7 +59,7 @@ const normalizeEvent = (raw, { deviceId: defaultDeviceId, userId = null, now = n
   if (payloadError) return { error: payloadError };
 
   return {
-    row: { type, sessionId, deviceId, userId, payload, occurredAt: resolveOccurredAt(occurredAt, now) }
+    row: { type, sessionId, deviceId, eventId, userId, payload, occurredAt: resolveOccurredAt(occurredAt, now) }
   };
 };
 
@@ -76,8 +77,11 @@ const readOptionalUserId = (req, jwtSecret) => {
 
 /**
  * POST /  본문은 이벤트 하나 또는 { deviceId, events: [...] } 묶음 (최대 50개).
+ * 이벤트마다 eventId(선택)를 주면 (deviceId, eventId)가 같은 재전송은 한 번만 저장된다.
  * 하나라도 잘못되면 아무것도 저장하지 않는다.
  */
+const countInserted = (created) => (created || []).filter((row) => row && row.id != null).length;
+
 const createEventsRouter = ({ Event = require('../models/Event'), jwtSecret = process.env.JWT_SECRET } = {}) => {
   const router = express.Router();
 
@@ -101,14 +105,18 @@ const createEventsRouter = ({ Event = require('../models/Event'), jwtSecret = pr
     }
 
     try {
+      // 같은 기기에서 같은 eventId가 다시 오면(재전송) 건너뛴다
+      const options = { ignoreDuplicates: true };
+      let created;
       try {
-        await Event.bulkCreate(rows);
+        created = await Event.bulkCreate(rows, options);
       } catch (error) {
         // 토큰은 유효한데 계정이 지워진 경우: 게스트 기록으로 남긴다
         if (error.name !== 'SequelizeForeignKeyConstraintError' || context.userId === null) throw error;
-        await Event.bulkCreate(rows.map((row) => ({ ...row, userId: null })));
+        created = await Event.bulkCreate(rows.map((row) => ({ ...row, userId: null })), options);
       }
-      return res.status(201).json({ saved: rows.length });
+      // Postgres는 건너뛴 행을 돌려주지 않아 id가 붙은 개수가 실제로 저장된 수다
+      return res.status(201).json({ saved: countInserted(created) });
     } catch (error) {
       console.error('❌ Event Save Error:', error.message);
       return res.status(500).json({ error: 'Failed to save events.' });

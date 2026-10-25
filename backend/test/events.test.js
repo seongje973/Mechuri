@@ -28,7 +28,20 @@ const startServer = async (Event) => {
 
 const fakeEvent = () => {
   const saved = [];
-  return { saved, bulkCreate: async (rows) => { saved.push(...rows); return rows; } };
+  const options = [];
+  return {
+    saved,
+    options,
+    bulkCreate: async (rows, opts) => {
+      options.push(opts);
+      // Postgres처럼 이미 있는 eventId 행은 건너뛰고 id 없이 돌려준다
+      return rows.map((row) => {
+        if (row.eventId && saved.some((s) => s.deviceId === row.deviceId && s.eventId === row.eventId)) return { ...row, id: null };
+        saved.push(row);
+        return { ...row, id: saved.length };
+      });
+    }
+  };
 };
 
 test('valid events become rows with payload and occurredAt', () => {
@@ -41,6 +54,7 @@ test('valid events become rows with payload and occurredAt', () => {
     type: 'question_answer',
     sessionId,
     deviceId,
+    eventId: null,
     userId: null,
     payload: { questionId: 'soup', answer: 'yes' },
     occurredAt: new Date('2026-12-14T02:59:00Z')
@@ -65,7 +79,9 @@ test('invalid events are rejected with a reason', () => {
     [{ type: 'result_shown', sessionId, deviceId, payload: {} }, /menu/],
     [{ type: 'accept', sessionId, deviceId, payload: { action: 'share', menu: '짬뽕' } }, /action/],
     [{ type: 'reject', sessionId, deviceId, payload: [] }, /payload/],
-    [{ type: 'rec_start', sessionId, deviceId, payload: { note: 'x'.repeat(3000) } }, /too large/]
+    [{ type: 'rec_start', sessionId, deviceId, payload: { note: 'x'.repeat(3000) } }, /too large/],
+    [{ type: 'rec_start', sessionId, deviceId, eventId: 'bad id!' }, /eventId/],
+    [{ type: 'rec_start', sessionId, deviceId, eventId: 12345678 }, /eventId/]
   ];
   for (const [raw, pattern] of cases) {
     assert.match(normalizeEvent(raw).error, pattern, JSON.stringify(raw).slice(0, 80));
@@ -155,6 +171,7 @@ test('POST falls back to a guest row when the token user no longer exists', asyn
         throw error;
       }
       saved.push(...rows);
+      return rows.map((row, i) => ({ ...row, id: i + 1 }));
     }
   };
   const server = await startServer(Event);
@@ -164,6 +181,36 @@ test('POST falls back to a guest row when the token user no longer exists', asyn
     assert.strictEqual(res.status, 201);
     assert.strictEqual(calls, 2);
     assert.strictEqual(saved[0].userId, null);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST keeps eventId and asks the DB to skip retried duplicates', async () => {
+  const Event = fakeEvent();
+  const server = await startServer(Event);
+  try {
+    const eventId = 'evt-0000-0001';
+    const res = await server.post({ deviceId, events: [{ type: 'rec_start', sessionId, eventId }] });
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(Event.saved[0].eventId, eventId);
+    assert.deepStrictEqual(Event.options[0], { ignoreDuplicates: true });
+  } finally {
+    server.close();
+  }
+});
+
+test('POST counts only rows actually inserted, so a full resend saves 0', async () => {
+  const Event = fakeEvent();
+  const server = await startServer(Event);
+  try {
+    const events = [
+      { type: 'rec_start', sessionId, eventId: 'evt-0000-0001' },
+      { type: 'rec_start', sessionId, eventId: 'evt-0000-0002' }
+    ];
+    assert.deepStrictEqual((await server.post({ deviceId, events })).body, { saved: 2 });
+    assert.deepStrictEqual((await server.post({ deviceId, events })).body, { saved: 0 });
+    assert.strictEqual(Event.saved.length, 2);
   } finally {
     server.close();
   }

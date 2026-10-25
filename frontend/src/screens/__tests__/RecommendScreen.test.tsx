@@ -9,6 +9,11 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
 }));
 
+jest.mock('../../analytics/events', () => ({
+  newSessionId: jest.fn(() => 'session-test-0001'),
+  track: jest.fn(),
+}));
+
 jest.mock('../../storage/userData', () => ({
   addHistory: jest.fn(async () => {}),
   getAvoidTags: jest.fn(async () => []),
@@ -168,6 +173,122 @@ describe('RecommendScreen', () => {
     expect(screen.queryByText('맛있게 드세요!')).toBeNull();
     expect(alert).toHaveBeenCalled();
     alert.mockRestore();
+  });
+
+  it('배달 앱도 웹도 열지 못하면 배달 수락으로 기록하지 않는다', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    const { Linking } = require('react-native');
+    const openURL = jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no app'));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await reachReveal();
+    track.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('배달'));
+    });
+    expect(alert).toHaveBeenCalledWith('배달 앱을 열지 못했어요', expect.any(String));
+    expect(track.mock.calls.some((c: any[]) => c[1].type === 'accept')).toBe(false);
+    openURL.mockRestore();
+    alert.mockRestore();
+  });
+
+  it('추천 한 판의 지표 이벤트를 같은 세션 ID로 보낸다 (US-23)', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    track.mockClear();
+    await reachReveal();
+    const top = shownTop();
+    await act(async () => {
+      fireEvent.press(screen.getByText('배달'));
+    });
+    const types = track.mock.calls.map((c: any[]) => c[1].type);
+    expect(types[0]).toBe('rec_start');
+    expect(types).toContain('question_answer');
+    expect(types).toContain('result_shown');
+    expect(track).toHaveBeenLastCalledWith('session-test-0001', { type: 'accept', payload: { action: 'delivery', menu: top } });
+    expect(track.mock.calls.every((c: any[]) => c[0] === 'session-test-0001')).toBe(true);
+  });
+
+  it('저장이 끝나기 전에 새 추천을 시작해도 먹을래요는 누른 판의 세션으로 기록한다', async () => {
+    const { track, newSessionId } = jest.requireMock('../../analytics/events');
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    newSessionId.mockReturnValueOnce('session-old').mockReturnValueOnce('session-new');
+    await reachReveal();
+    const top = shownTop();
+    let finishSave!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishSave = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    track.mockClear();
+    await act(async () => {
+      finishSave();
+    });
+    expect(track).toHaveBeenCalledWith('session-old', { type: 'accept', payload: { action: 'eat', menu: top } });
+  });
+
+  it('배달 앱이 열리기 전에 새 추천을 시작해도 배달 수락은 누른 판의 세션으로 기록한다', async () => {
+    const { track, newSessionId } = jest.requireMock('../../analytics/events');
+    const { Linking } = require('react-native');
+    newSessionId.mockReturnValueOnce('session-old').mockReturnValueOnce('session-new');
+    let opened!: () => void;
+    const openURL = jest.spyOn(Linking, 'openURL').mockImplementationOnce(() => new Promise<void>(r => (opened = r)));
+    await reachReveal();
+    const top = shownTop();
+    await act(async () => {
+      fireEvent.press(screen.getByText('배달'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    track.mockClear();
+    await act(async () => {
+      opened();
+    });
+    expect(track).toHaveBeenCalledWith('session-old', { type: 'accept', payload: { action: 'delivery', menu: top } });
+    openURL.mockRestore();
+  });
+
+  it('결과를 준비하는 사이 화면을 떠나면 결과 이벤트를 보내지 않는다', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    const { getHistories } = jest.requireMock('../../storage/userData');
+    let loaded!: () => void;
+    const gate = new Promise<void>(r => (loaded = r));
+    getHistories.mockImplementation(() => gate.then(() => []));
+    const view = render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn={false} userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && screen.queryByText('👍 예'); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    track.mockClear();
+    view.unmount();
+    await act(async () => {
+      loaded();
+    });
+    getHistories.mockImplementation(async () => []);
+    expect(track.mock.calls.some((c: any[]) => c[1].type === 'result_shown')).toBe(false);
+  });
+
+  it('틀렸어요 이벤트의 retries는 이번 것을 포함한 횟수다', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    await reachReveal();
+    track.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('틀렸어요 🙅'));
+    });
+    const reject = track.mock.calls.find((c: any[]) => c[1].type === 'reject');
+    expect(reject[1].payload.retries).toBe(1);
   });
 
   it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {

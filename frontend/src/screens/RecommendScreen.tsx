@@ -19,6 +19,7 @@ import { addHistory, getAvoidTags, getFavorites, getHistories, isFavorite, toggl
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { openDelivery } from '../utils/openDelivery';
+import { AcceptAction, newSessionId, track } from '../analytics/events';
 
 const { width } = Dimensions.get('window');
 
@@ -94,6 +95,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const [favorited, setFavorited] = useState(false);
   const selectedNameRef = useRef<string | null>(null);
+  // 지표용 추천 세션 ID (US-23). 추천 한 판마다 새로 만든다
+  const analyticsSessionRef = useRef<string | null>(null);
+  // 저장을 기다리는 동작은 누른 순간의 세션을 넘긴다. 그사이 새 추천을 시작해도 이전 판에 기록된다
+  const trackAccept = (action: AcceptAction, menu: string, sessionId = analyticsSessionRef.current) =>
+    track(sessionId, { type: 'accept', payload: { action, menu } });
   // 하트 조회·토글마다 올라가는 번호. 늦게 온 이전 결과가 하트를 되돌리지 않게 한다
   const favoriteOpRef = useRef(0);
   // 하트 저장은 하나씩 차례로 한다. 게스트 목록은 읽고-고쳐-쓰기라 겹치면 앞 변경이 사라진다
@@ -132,10 +138,15 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     })();
   }, []);
 
+  // 화면이 사라지면 진행 중이던 판을 끝낸다. 늦게 끝난 비동기 작업이 결과 이벤트를 보내지 않는다
+  useEffect(() => () => {
+    analyticsSessionRef.current = null;
+  }, []);
+
   // 홈의 "바로 추천"은 autoStart 값을 바꿔 보낸다. 인트로를 건너뛰고 첫 질문부터 시작한다
   const autoStart = route?.params?.autoStart;
   useEffect(() => {
-    if (autoStart) startAkinator([]);
+    if (autoStart) startAkinator([], true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
@@ -182,7 +193,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 아키네이터 게임 기동
-  const startAkinator = async (excluded: string[] = excludedCategories) => {
+  const startAkinator = async (excluded: string[] = excludedCategories, auto = false) => {
     // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags)은 시작 전에 후보에서 뺀다
     let avoidTags: string[] = [];
     try {
@@ -198,6 +209,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     }
 
     eatRoundRef.current += 1;
+    analyticsSessionRef.current = newSessionId();
+    track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
+
     setSession(first);
     setGameState('questioning');
     goNext(first);
@@ -215,6 +229,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const handleAnswer = (answer: ScoreAnswer) => {
     if (!session || !currentQuestion) return;
+    track(analyticsSessionRef.current, {
+      type: 'question_answer',
+      payload: { questionId: currentQuestion.id, answer, index: session.answers.length }
+    });
     const next = answerQuestion(session, currentQuestion, answer);
     setSession(next);
     goNext(next);
@@ -233,7 +251,19 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     });
   };
 
-  const showResults = (ranked: RecommendResult[]) => {
+  const showResults = (ranked: RecommendResult[], finalSession: RecommendSession | null, via?: 'worldcup') => {
+    if (ranked[0]) {
+      track(analyticsSessionRef.current, {
+        type: 'result_shown',
+        payload: {
+          menu: ranked[0].item.name,
+          alternatives: ranked.slice(1).map(r => r.item.name),
+          questions: finalSession?.answers.length ?? 0,
+          retries: finalSession?.rejected.length ?? 0,
+          ...(via ? { via } : {})
+        }
+      });
+    }
     setResults(ranked);
     setEatenMenus([]);
     setGameState('reveal');
@@ -247,10 +277,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const finishAkinator = async (finalSession: RecommendSession) => {
     setCurrentQuestion(null);
+    const analyticsSession = analyticsSessionRef.current;
     // "틀렸어요" 뒤에는 처음 불러온 보정값을 그대로 쓴다
     const adj = finalSession.rejected.length > 0 ? adjustments : await loadAdjustments();
+    // 보정값을 읽는 사이 새 추천을 시작했으면 이전 판 결과를 띄우지 않는다
+    if (analyticsSessionRef.current !== analyticsSession) return;
     setAdjustments(adj);
-    showResults(getResults(finalSession, QUESTIONS, adj));
+    showResults(getResults(finalSession, QUESTIONS, adj), finalSession);
   };
 
   // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
@@ -258,6 +291,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const top = results[0];
     if (!session || !top || !canReject(session)) return;
     const next = rejectTopResult(session, top.item.name);
+    // retries는 이번 것을 포함한 "틀렸어요" 횟수. 뒤따르는 result_shown의 retries와 같다
+    track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: next.rejected.length } });
     setSession(next);
     setSelectedMenu(null);
     setRestaurantsList([]);
@@ -278,7 +313,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const handleWorldCupWinner = (menu: MenuItem) => {
     const winner = worldCupResults.find(r => r.item.name === menu.name);
     if (!winner) return;
-    showResults([winner, ...worldCupResults.filter(r => r !== winner)].slice(0, results.length || 3));
+    showResults([winner, ...worldCupResults.filter(r => r !== winner)].slice(0, 3), session, 'worldcup');
   };
 
   // 대안을 누르면 1위 자리로 올린다
@@ -326,20 +361,26 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const handleOpenMap = async (res: Restaurant) => {
     if (!selectedMenu) return;
+    trackAccept('restaurant', selectedMenu.name);
     // 지도로 식당을 살펴보는 것만으로는 먹은 기록을 남기지 않는다. 기록은 "이거 먹을래요"에서만 (최근 먹은 메뉴 감점에 쓰임)
     console.log("📡 Navigating to in-app map screen with restaurant param:", res.name);
     navigation.navigate("지도", { restaurant: res });
   };
 
   const handleOpenBaemin = async (menuName: string) => {
+    const analyticsSession = analyticsSessionRef.current;
     const opened = await openDelivery(menuName);
     if (opened === 'failed') {
       Alert.alert("배달 앱을 열지 못했어요", "배달의민족 앱이나 브라우저를 확인해 주세요.");
+      return;
     }
+    // 배달 앱이나 웹을 실제로 연 경우만 수락으로 센다
+    trackAccept('delivery', menuName, analyticsSession);
   };
 
   // "근처 식당" (US-20): 지도 탭에서 이 메뉴로 반경 1.5km 검색
   const handleNearby = (menu: MenuItem) => {
+    trackAccept('restaurant', menu.name);
     navigation.navigate("지도", { keyword: menu.name, requestedAt: Date.now() });
   };
 
@@ -351,11 +392,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const savingKey = `${round}:${menu.name}`;
     if (savingMenusRef.current.has(savingKey)) return;
     savingMenusRef.current.add(savingKey);
+    const analyticsSession = analyticsSessionRef.current;
     try {
       await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
       if (round === eatRoundRef.current) {
         setEatenMenus(prev => (prev.includes(menu.name) ? prev : [...prev, menu.name]));
       }
+      trackAccept('eat', menu.name, analyticsSession);
     } catch (e) {
       console.log("Failed to save eaten history", e);
       Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
@@ -369,6 +412,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (!selectedMenu) return;
     const menuName = selectedMenu.name;
     const favoriteOp = ++favoriteOpRef.current;
+    const analyticsSession = analyticsSessionRef.current;
     const item = { menuName, emoji: selectedMenu.emoji, category: selectedMenu.category };
     const saving = favoriteQueueRef.current.then(() => toggleFavorite(item));
     favoriteQueueRef.current = saving.catch(() => undefined);
@@ -376,6 +420,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       const { favorited } = await saving;
       // 저장하는 사이 다른 메뉴를 골랐거나 다시 조회했으면 덮어쓰지 않는다
       if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) setFavorited(favorited);
+      if (favorited) trackAccept('favorite', menuName, analyticsSession);
     } catch (e) {
       // 앞선 저장은 됐는데 이번 저장만 실패했을 수 있으니, 실제 저장 상태를 다시 읽어 하트를 맞춘다
       if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) {
