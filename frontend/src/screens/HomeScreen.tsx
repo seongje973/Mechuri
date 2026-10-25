@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.ink,
     fontFamily: fonts.body,
-    fontSize: 13,
+    fontSize: 12.5,
     lineHeight: 18,
     paddingRight: spacing.sm,
   },

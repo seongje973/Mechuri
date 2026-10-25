@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   },
   grabber: { width: 44, height: 5, borderRadius: radii.full, backgroundColor: colors.line, marginBottom: 16 },
   mascot: { fontSize: 44, marginBottom: 8 },
-  title: { fontFamily: fonts.display, fontSize: 24, lineHeight: 32, color: colors.ink, textAlign: 'center', marginBottom: 8 },
+  title: { fontFamily: fonts.display, fontSize: 21, color: colors.ink, textAlign: 'center', marginBottom: 8 },
   body: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 22, color: colors.muted, textAlign: 'center', marginBottom: 22 },
   kakaoBtn: {
     alignSelf: 'stretch',
