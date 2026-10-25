@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
+import { addHistory, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA } from '../constants/menuData';
 
 const { width } = Dimensions.get('window');
@@ -56,6 +57,8 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   
   // 우승자 관리
   const [winnerMenu, setWinnerMenu] = useState<MenuItem | null>(null);
+  // null = 아직 모름 (하트 비활성)
+  const [winnerFavorited, setWinnerFavorited] = useState<boolean | null>(null);
   
   // GPS 및 주변 맛집용 상태
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
@@ -132,7 +135,16 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   // 최종 우승 처리 및 맛집 API 동기화
   const finishWorldCup = async (winner: MenuItem) => {
     setWinnerMenu(winner);
+    setWinnerFavorited(null);
     setGameState('winner');
+
+    // 하트는 식당 검색을 기다리지 않고 바로 실제 최애 상태를 읽는다. 그 사이 사용자가 누른 값은 덮어쓰지 않는다
+    isFavorite(winner.name)
+      .then(favorited => setWinnerFavorited(prev => (prev === null ? favorited : prev)))
+      .catch(e => {
+        console.log("Failed to load WorldCup winner favorite state", e);
+        setWinnerFavorited(prev => (prev === null ? false : prev));
+      });
     setLoadingRestaurants(true);
     setRestaurantsList([]);
 
@@ -155,22 +167,17 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
       setLoadingRestaurants(false);
     }
 
-    // 2. 로그인 상태일 경우 백엔드 History에 우승 메뉴 저장
-    if (isLoggedIn) {
-      try {
-        console.log(`🏆 Logging WorldCup winner: ${winner.name}`);
-        await apiFetch(`/api/user/histories`, {
-          method: 'POST',
-          body: {
-            menuName: winner.name,
-            emoji: winner.emoji,
-            restaurantName: '이상형 월드컵 우승',
-            category: winner.category
-          }
-        });
-      } catch (e) {
-        console.log("Failed to sync WorldCup winner history to backend", e);
-      }
+    // 2. 우승 메뉴를 식사 기록에 저장 (게스트는 이 기기에, 로그인은 서버에)
+    try {
+      console.log(`🏆 Logging WorldCup winner: ${winner.name}`);
+      await addHistory({
+        menuName: winner.name,
+        emoji: winner.emoji,
+        restaurantName: '이상형 월드컵 우승',
+        category: winner.category
+      });
+    } catch (e) {
+      console.log("Failed to save WorldCup winner history", e);
     }
   };
 
@@ -199,34 +206,17 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
       });
   };
 
-  // 최애 등록
+  // 최애 등록/해제. 게스트도 이 기기에 저장되고, 3개째면 저장소가 로그인 시트를 띄운다
   const handleToggleFavorite = async () => {
-    if (!winnerMenu) return;
-
-    if (!isLoggedIn) {
-      Alert.alert(
-        "로그인이 필요한 서비스입니다 🐣",
-        "최애 음식을 등록하고 나만의 맛집 리스트를 간직하려면 카카오로 로그인해 보세요!",
-        [
-          { text: "나중에" },
-          { text: "로그인하러 가기 ➔", onPress: () => navigation.navigate("마이페이지") }
-        ]
-      );
-      return;
-    }
+    if (!winnerMenu || winnerFavorited === null) return;
 
     try {
-      const res = await apiFetch(`/api/user/favorites`, {
-        method: 'POST',
-        body: {
-          menuName: winnerMenu.name,
-          emoji: winnerMenu.emoji,
-          category: winnerMenu.category
-        }
+      const { favorited } = await toggleFavorite({
+        menuName: winnerMenu.name,
+        emoji: winnerMenu.emoji,
+        category: winnerMenu.category
       });
-      if (res.ok) {
-        Alert.alert("등록 성공 🐣", `[${winnerMenu.name}]이 최애 음식 리스트에 등록되었습니다! 내 정보 탭에서 확인해 보세요.`);
-      }
+      setWinnerFavorited(favorited);
     } catch (e) {
       Alert.alert("에러", "최애 메뉴 저장에 실패했습니다.");
     }
@@ -363,8 +353,8 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
               <View style={{ flex: 1, marginLeft: 16 }}>
                 <View style={styles.winnerTitleRow}>
                   <Text style={styles.winnerMenuName}>{winnerMenu.name}</Text>
-                  <TouchableOpacity onPress={handleToggleFavorite} style={styles.favBtn}>
-                    <Text style={{ fontSize: 22 }}>❤️</Text>
+                  <TouchableOpacity onPress={handleToggleFavorite} style={styles.favBtn} disabled={winnerFavorited === null}>
+                    <Text style={{ fontSize: 22 }}>{winnerFavorited ? '❤️' : '🤍'}</Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.winnerCategory}>{winnerMenu.category}</Text>
