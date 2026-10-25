@@ -196,10 +196,10 @@ export const getResults = (
         })
         .filter((text): text is string => !!text);
       const extra = extraReasons[r.item.name];
-      const unique = Array.from(new Set([...tasteReasons, ...session.situationReasons, ...(extra ? [extra] : [])])).slice(
-        0,
-        MAX_REASON_CHIPS
-      );
+      const base = Array.from(new Set([...tasteReasons, ...session.situationReasons]));
+      // 날씨·시간대 보정은 점수에 들어갔으니 칩이 꽉 차도 한 자리는 남겨 둔다
+      const unique =
+        extra && !base.includes(extra) ? [...base.slice(0, MAX_REASON_CHIPS - 1), extra] : base.slice(0, MAX_REASON_CHIPS);
       return { ...r, reasons: unique.length > 0 ? unique : [r.item.category] };
     });
 };

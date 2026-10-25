@@ -1,7 +1,7 @@
 import { MENU_DATA, MenuItem } from '../../constants/menuData';
 import { QUESTIONS, Question } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
-import { MAX_QUESTIONS, RETRY_EXTRA_QUESTIONS, RETRY_MIN_QUESTIONS, RETRY_WORLDCUP_SIZE, ScoreAnswer } from '../config';
+import { MAX_QUESTIONS, MAX_REASON_CHIPS, RETRY_EXTRA_QUESTIONS, RETRY_MIN_QUESTIONS, RETRY_WORLDCUP_SIZE, ScoreAnswer } from '../config';
 import {
   RecommendSession,
   answerQuestion,
@@ -125,6 +125,19 @@ describe('결과와 추천 이유 (US-12)', () => {
     const before = getResults(s, QUESTIONS).map(r => r.item.name);
     const after = getResults(s, QUESTIONS, { [before[0]]: -2 }).map(r => r.item.name);
     expect(after[0]).not.toBe(before[0]);
+  });
+
+  it('날씨·시간대 이유는 칩이 꽉 차도 한 자리를 차지한다', () => {
+    let s = start();
+    s = answerQuestion(s, q('party-solo'), 'yes');
+    s = answerQuestion(s, q('serving-delivery'), 'yes');
+    s = answerQuestion(s, q('soup'), 'yes');
+    s = answerQuestion(s, q('spicy'), 'no');
+    const top = getResults(s, QUESTIONS)[0];
+    expect(top.reasons).toHaveLength(MAX_REASON_CHIPS);
+    const withContext = getResults(s, QUESTIONS, {}, undefined, { [top.item.name]: '비 오는 날엔 국물' })[0];
+    expect(withContext.reasons).toHaveLength(MAX_REASON_CHIPS);
+    expect(withContext.reasons[MAX_REASON_CHIPS - 1]).toBe('비 오는 날엔 국물');
   });
 
   it('아무 답도 점수를 올리지 않았으면 나라별 분류를 이유로 보여준다', () => {

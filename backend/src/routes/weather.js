@@ -17,6 +17,8 @@ const toCondition = (code) => {
 };
 
 const parseCoord = (value, limit) => {
+  // Number('')는 0이라 빈 값이 적도(0,0) 좌표로 바뀌지 않게 먼저 거른다
+  if (typeof value !== 'string' || value.trim() === '') return null;
   const n = Number(value);
   return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
 };
@@ -46,9 +48,11 @@ const createWeatherRouter = ({ fetchImpl = (...args) => fetch(...args), now = ()
       const response = await fetchImpl(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`open-meteo ${response.status}`);
       const body = await response.json();
-      const temperature = Number(body?.current?.temperature_2m);
+      // Number(null)은 0이라 값이 빠지면 0도·맑음이 되지 않게 null을 먼저 거른다
+      const toNumber = (value) => (value === null || value === undefined || value === '' ? NaN : Number(value));
+      const temperature = toNumber(body?.current?.temperature_2m);
       const data = {
-        condition: toCondition(Number(body?.current?.weather_code)),
+        condition: toCondition(toNumber(body?.current?.weather_code)),
         temperature: Number.isFinite(temperature) ? temperature : null
       };
       if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);

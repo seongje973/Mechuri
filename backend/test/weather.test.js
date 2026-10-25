@@ -63,6 +63,8 @@ test('좌표가 없거나 이상하면 400', async () => {
     assert.strictEqual((await server.get('lat=abc&lng=127')).status, 400);
     assert.strictEqual((await server.get('lat=91&lng=127')).status, 400);
     assert.strictEqual((await server.get('lng=127')).status, 400);
+    assert.strictEqual((await server.get('lat=&lng=')).status, 400);
+    assert.strictEqual((await server.get('lat=%20&lng=127')).status, 400);
   } finally {
     server.close();
   }
@@ -76,6 +78,16 @@ test('날씨 API가 실패하면 503', async () => {
   });
   try {
     assert.strictEqual((await server.get('lat=37.5&lng=127')).status, 503);
+  } finally {
+    server.close();
+  }
+});
+
+test('온도나 날씨 코드가 비어 있으면 0도·맑음이 아니라 모름으로 준다', async () => {
+  const server = await startServer({ fetchImpl: fakeFetch({ temperature_2m: null, weather_code: null }).impl });
+  try {
+    const res = await server.get('lat=37.5&lng=127');
+    assert.deepStrictEqual(res.body, { condition: 'unknown', temperature: null, cached: false });
   } finally {
     server.close();
   }
