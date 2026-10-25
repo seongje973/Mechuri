@@ -68,7 +68,7 @@ npm install -g eas-cli
 cd frontend
 eas login                       # Expo 계정
 eas init                        # 프로젝트 연결 (app.json에 projectId가 들어감)
-eas env:create --name EXPO_PUBLIC_KAKAO_CLIENT_ID --value "카카오_REST_API_키" --environment preview --environment production --visibility plaintext
+eas env:set --name EXPO_PUBLIC_KAKAO_CLIENT_ID --value "카카오_REST_API_키" --environment preview --environment production --visibility plaintext
 eas build -p android --profile preview
 ```
 
