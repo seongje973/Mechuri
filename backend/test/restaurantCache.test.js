@@ -83,19 +83,61 @@ test('cache entries expire after 10 minutes', async () => {
   assert.strictEqual(kakaoCalls.length, 2);
 });
 
-test('failed Kakao calls are not cached', async () => {
+test('failed Kakao calls return 502 and are not cached', async () => {
   const realGet = axios.get;
   axios.get = async () => {
     kakaoCalls.push('fail');
     throw new Error('quota');
   };
-  const fallback = await search({ keyword: '김치찌개', x: '127.0276', y: '37.4979' });
+  const failed = await fetch(`${baseUrl}?keyword=김치찌개&x=127.0276&y=37.4979`);
   axios.get = realGet;
   const real = await search({ keyword: '김치찌개', x: '127.0276', y: '37.4979' });
 
-  assert.match(fallback.source, /Mock/);
+  assert.strictEqual(failed.status, 502);
+  assert.strictEqual((await failed.json()).restaurants, undefined);
   assert.strictEqual(real.cached, undefined);
   assert.strictEqual(kakaoCalls.length, 2);
+});
+
+test('Kakao results carry no invented rating or ranking badge', async () => {
+  const { restaurants } = await search({ keyword: '김치찌개', x: '127.0276', y: '37.4979' });
+  assert.deepStrictEqual(Object.keys(restaurants[0]).sort(), [
+    'address', 'category', 'distance', 'latitude', 'longitude', 'name', 'url'
+  ]);
+  assert.strictEqual(restaurants[0].distance, '120m');
+});
+
+const withEnv = async (env, fn) => {
+  const saved = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
+  Object.entries(env).forEach(([k, v]) => (v === undefined ? delete process.env[k] : (process.env[k] = v)));
+  try {
+    await fn();
+  } finally {
+    Object.entries(saved).forEach(([k, v]) => (v === undefined ? delete process.env[k] : (process.env[k] = v)));
+  }
+};
+
+test('without a Kakao key the API says so instead of inventing restaurants', async () => {
+  for (const key of [undefined, 'your_kakao_rest_api_key']) {
+    await withEnv({ KAKAO_REST_API_KEY: key, RESTAURANT_MOCK: undefined }, async () => {
+      const res = await fetch(`${baseUrl}?keyword=김치찌개`);
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual((await res.json()).error, 'restaurant_search_unavailable');
+    });
+  }
+  assert.strictEqual(kakaoCalls.length, 0);
+});
+
+test('RESTAURANT_MOCK=true gives clearly labeled samples, never in production', async () => {
+  await withEnv({ KAKAO_REST_API_KEY: undefined, RESTAURANT_MOCK: 'true', NODE_ENV: 'development' }, async () => {
+    const body = await search({ keyword: '김치찌개' });
+    assert.strictEqual(body.mock, true);
+    assert.ok(body.restaurants.every((r) => r.name.startsWith('[샘플]') && r.rating === undefined));
+  });
+  await withEnv({ KAKAO_REST_API_KEY: undefined, RESTAURANT_MOCK: 'true', NODE_ENV: 'production' }, async () => {
+    const res = await fetch(`${baseUrl}?keyword=김치찌개`);
+    assert.strictEqual(res.status, 503);
+  });
 });
 
 test('array or blank keyword is rejected with 400', async () => {

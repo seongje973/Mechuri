@@ -33,12 +33,10 @@ jest.setTimeout(15000);
 
 const restaurant = (name: string) => ({
   name,
-  rating: '⭐ 4.5',
   distance: '100m',
   category: '한식',
   url: 'https://place.map.kakao.com/1',
   address: '서울 강남구',
-  type: '주변 맛집',
   latitude: 37.5,
   longitude: 127.03,
 });
@@ -148,7 +146,7 @@ describe('MapScreen', () => {
     const { renderer } = await renderMap({ keyword: '김치찌개', requestedAt: 1 });
     expect(allText(renderer)).toContain('식당 정보를 불러오지 못했어요.');
     expect(allText(renderer)).not.toContain('반경 1.5km 안에');
-    expect(renderer.root.findAll((n: Node) => n.type === 'Text' && n.children.includes('⭐ 4.8'))).toHaveLength(0);
+    expect(allText(renderer)).not.toContain('⭐');
 
     mockedFetch.mockResolvedValueOnce(okResponse(['김치찌개 명가']));
     const retry = renderer.root
@@ -177,6 +175,29 @@ describe('MapScreen', () => {
     expect(requestedKeywords()).toEqual(['맛집']);
     expect(allText(renderer)).toContain('동네 맛집');
     expect(allText(renderer)).toContain('위치 확인 실패');
+  });
+
+  it('평점 없이 분류와 거리만 보여준다', async () => {
+    mockedFetch.mockResolvedValue(okResponse(['김치찌개 명가']));
+    const { renderer } = await renderMap({ keyword: '김치찌개', requestedAt: 1 });
+    expect(allText(renderer)).toContain('한식 • 100m');
+    expect(allText(renderer)).not.toContain('⭐');
+    expect(allText(renderer)).not.toContain('샘플');
+  });
+
+  it('개발용 샘플 응답이면 실제 식당이 아니라고 표시한다', async () => {
+    mockedFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ mock: true, restaurants: [restaurant('[샘플] 김치찌개 식당 1')] }),
+    });
+    const { renderer } = await renderMap({ keyword: '김치찌개', requestedAt: 1 });
+    expect(allText(renderer)).toContain('개발용 샘플 데이터예요. 실제 식당이 아니에요.');
+  });
+
+  it('식당 검색이 설정되지 않은 서버(503)도 오류로 보여준다', async () => {
+    mockedFetch.mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: 'restaurant_search_unavailable' }) });
+    const { renderer } = await renderMap();
+    expect(allText(renderer)).toContain('식당 정보를 불러오지 못했어요.');
   });
 
   it('검색 결과가 없으면 안내 문구를 보여준다', async () => {

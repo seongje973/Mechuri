@@ -15,17 +15,19 @@ import { apiFetch } from '../api/client';
 import * as Location from 'expo-location';
 import MapView, { Marker, Callout } from 'react-native-maps';
 
+// 카카오 로컬 검색에는 평점이 없어서 평점은 받지도 보여주지도 않는다
 interface Restaurant {
   name: string;
-  rating: string;
-  distance: string;
+  distance?: string;
   category: string;
   url: string;
   address: string;
-  type: string;
+  type?: string;
   latitude: number;
   longitude: number;
 }
+
+const metaLine = (res: Restaurant) => [res.category, res.distance].filter(Boolean).join(' • ');
 
 interface MapScreenProps {
   route?: any;
@@ -42,6 +44,8 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
   const [activeIndex, setActiveIndex] = useState<number>(0);
   // 서버에서 식당을 못 받아오면 가짜 식당 대신 오류와 다시 시도 버튼을 보여준다
   const [loadError, setLoadError] = useState(false);
+  // 개발용 샘플 데이터(RESTAURANT_MOCK)면 실제 식당이 아니라고 표시한다
+  const [isSample, setIsSample] = useState(false);
 
   const mapRef = useRef<MapView>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -86,6 +90,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
     const isStale = () => requestId !== requestIdRef.current;
     setLoading(true);
     setLoadError(false);
+    setIsSample(false);
     setActiveIndex(0);
     try {
       let lat = 37.497942; // Gangnam default
@@ -126,6 +131,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
       const data = await response.json();
       if (isStale()) return;
       setRestaurantsList(data.restaurants || []);
+      setIsSample(data.mock === true);
       focusRegion(lat, lng);
     } catch (error) {
       if (isStale()) return;
@@ -262,7 +268,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
                     <Callout tooltip onPress={() => handleOpenMap(res)}>
                       <View style={styles.calloutBubble}>
                         <Text style={styles.calloutName}>{res.name}</Text>
-                        <Text style={styles.calloutMeta}>{res.category} • {res.rating}</Text>
+                        <Text style={styles.calloutMeta}>{metaLine(res)}</Text>
                         <Text style={styles.calloutAddress}>{res.address}</Text>
                         <Text style={styles.calloutLink}>📍 길찾기 ➔</Text>
                       </View>
@@ -276,6 +282,9 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 
         {/* Bottom Restaurants Card Panel */}
         <View style={styles.bottomPanel}>
+          {!loading && isSample ? (
+            <Text style={styles.sampleNotice}>개발용 샘플 데이터예요. 실제 식당이 아니에요.</Text>
+          ) : null}
           {!loading && loadError ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요.</Text>
@@ -310,10 +319,10 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
                 >
                   <View style={styles.cardHeader}>
                     <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.cardBadge}>{item.type}</Text>
+                    {item.type ? <Text style={styles.cardBadge}>{item.type}</Text> : null}
                   </View>
                   
-                  <Text style={styles.cardMeta}>{item.category} • {item.distance} • {item.rating}</Text>
+                  <Text style={styles.cardMeta}>{metaLine(item)}</Text>
                   <Text style={styles.cardAddress} numberOfLines={1}>{item.address}</Text>
                   
                   <TouchableOpacity style={styles.findRoadBtn} onPress={() => handleOpenMap(item)}>
@@ -399,6 +408,18 @@ const styles = StyleSheet.create({
     color: '#a8a29e',
     fontSize: 13,
     fontWeight: '600',
+  },
+  sampleNotice: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(41, 37, 36, 0.95)',
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
   },
   retryBtn: {
     marginTop: 12,
