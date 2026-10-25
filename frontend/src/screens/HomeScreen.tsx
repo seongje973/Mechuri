@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TouchableOpacity, 
-  ScrollView, 
-  Platform,
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  ScrollView,
   ActivityIndicator
 } from 'react-native';
 import { apiFetch } from '../api/client';
@@ -25,6 +24,54 @@ interface RankingItem {
   count: number;
 }
 
+// 디자인 시안(크림 테마) 색상. 앱 전체 테마 정리 전까지 홈 화면에서만 쓴다.
+const C = {
+  cream: '#FFF7EC',
+  surface: '#FFFFFF',
+  shell: '#F3E4CC',
+  line: '#EAD9C0',
+  ink: '#2E2219',
+  muted: '#75604F',
+  yolk: '#F5A623',
+  yolkDeep: '#D98A0B',
+  quail: '#B07A4A',
+  feather: '#8A5A32',
+  blush: '#F28B6B',
+};
+
+export const FALLBACK_RANKING: RankingItem[] = [
+  { rank: 1, menuName: '삼겹살', emoji: '🥩', category: '한식', count: 18 },
+  { rank: 2, menuName: '짜장면', emoji: '🍜', category: '중식', count: 14 },
+  { rank: 3, menuName: '돈까스', emoji: '🍛', category: '일식', count: 11 },
+  { rank: 4, menuName: '초밥', emoji: '🍣', category: '일식', count: 9 },
+  { rank: 5, menuName: '피자', emoji: '🍕', category: '양식', count: 6 }
+];
+
+// 시간대별 인사. 마스코트 추리는 반말로 말한다.
+export const getGreeting = (hour: number = new Date().getHours()) => {
+  if (hour < 11) return '좋은 아침! 첫 끼 뭐 먹을지 내가 맞혀볼게.';
+  if (hour < 15) return '점심 고민 중이지? 내가 맞혀볼게.';
+  if (hour < 18) return '출출하지? 간식이든 밥이든 맞혀볼게.';
+  return '저녁 아직이지? 오늘 메뉴, 내가 맞혀볼게.';
+};
+
+// 탐정 메추리 "추리". 이미지 에셋이 생기기 전까지 도형으로 그린다.
+function Quail() {
+  return (
+    <View style={quail.wrap}>
+      <Text style={quail.plume}>?</Text>
+      <View style={quail.body}>
+        <View style={quail.belly} />
+        <View style={[quail.eye, { left: 26 }]} />
+        <View style={[quail.eye, { right: 26 }]} />
+        <View style={[quail.cheek, { left: 16 }]} />
+        <View style={[quail.cheek, { right: 16 }]} />
+        <View style={quail.beak} />
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen({ navigation, isLoggedIn, userProfile }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const [rankingList, setRankingList] = useState<RankingItem[]>([]);
@@ -39,219 +86,131 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
         const data = await response.json();
         setRankingList(data.ranking || []);
       } else {
-        setRankingList(getFallbackRanking());
+        setRankingList(FALLBACK_RANKING);
       }
     } catch (e) {
       console.log('⚠️ Failed to fetch ranking from server, applying client fallback');
-      setRankingList(getFallbackRanking());
+      setRankingList(FALLBACK_RANKING);
     } finally {
       setLoadingRanking(false);
     }
   };
 
-  const getFallbackRanking = (): RankingItem[] => [
-    { rank: 1, menuName: '삼겹살', emoji: '🥩', category: '한식', count: 18 },
-    { rank: 2, menuName: '짜장면', emoji: '🍜', category: '중식', count: 14 },
-    { rank: 3, menuName: '돈까스', emoji: '🍛', category: '일식', count: 11 },
-    { rank: 4, menuName: '초밥', emoji: '🍣', category: '일식', count: 9 },
-    { rank: 5, menuName: '피자', emoji: '🍕', category: '양식', count: 6 }
-  ];
-
   useEffect(() => {
     fetchRanking();
   }, []);
 
-  // Simple check for time of day to display dynamic greeting
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 11) return '상쾌한 아침, 오늘 첫 끼는?';
-    if (hour < 15) return '즐거운 점심, 오늘 점심 뭐 먹지?';
-    if (hour < 18) return '출출한 오후, 맛있는 간식 타임?';
-    return '행복한 저녁, 오늘 저녁은 결정하셨나요?';
-  };
+  // autoStart: 추천 화면이 소개 단계를 건너뛰고 바로 첫 질문을 띄우도록 하는 신호 (US-19: 첫 질문까지 탭 1번)
+  const startRecommend = () => navigation.navigate('메뉴 추천', { autoStart: Date.now() });
+
+  const nickname = isLoggedIn && userProfile?.nickname ? userProfile.nickname : null;
 
   return (
     <View style={[styles.mainContainer, { paddingTop: insets.top }]}>
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={[
-          styles.container, 
+          styles.container,
           { paddingBottom: insets.bottom + 20 }
-        ]} 
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        
+
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.appTitle}>🍲 메추리</Text>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-          </View>
-          <TouchableOpacity 
+          <Text style={styles.appTitle}>메추리</Text>
+          <TouchableOpacity
             style={styles.profileBadge}
             onPress={() => navigation.navigate('마이페이지')}
+            accessibilityLabel="내 정보"
           >
-            <Text style={styles.profileEmoji}>😋</Text>
+            <Text style={styles.profileEmoji}>{isLoggedIn ? '😋' : '👤'}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Banner Card / Shortcut Recommendation */}
-        <View style={styles.glassCard}>
-          <View style={styles.bannerRow}>
-            <Text style={styles.bannerBadge}>오늘의 추천 테마 🌧️</Text>
+        {/* Hero: 바로 추천 */}
+        <View style={styles.hero}>
+          <View style={styles.bubble}>
+            <Text style={styles.bubbleText}>
+              {nickname ? `${nickname}, ` : ''}{getGreeting()}
+            </Text>
+            <View style={styles.bubbleTail} />
           </View>
-          <Text style={styles.bannerTitle}>비 오는 날엔 역시 따뜻한 국물 요리!</Text>
-          <Text style={styles.bannerDesc}>
-            오늘 같이 흐리고 비가 오는 날에는 칼칼하고 따뜻한 김치찌개나 짬뽕 어떠신가요?
-          </Text>
-          <TouchableOpacity 
-            style={styles.bannerButton}
-            onPress={() => navigation.navigate('메뉴 추천')}
+          <Quail />
+          <TouchableOpacity
+            style={styles.ctaButton}
+            onPress={startRecommend}
+            activeOpacity={0.85}
+            accessibilityRole="button"
           >
-            <Text style={styles.bannerButtonText}>추천 메뉴 더 보기</Text>
+            <Text style={styles.ctaText}>바로 추천</Text>
           </TouchableOpacity>
+          <Text style={styles.ctaHint}>질문 몇 개에 답하면 오늘 메뉴를 골라 드려요.</Text>
         </View>
 
-        {/* Section: Real-time Ranking Board */}
-        <View style={styles.rankingSection}>
-          <View style={styles.rankingHeaderRow}>
-            <Text style={styles.sectionTitle}>🔥 실시간 인기 메뉴 TOP 5</Text>
-            <TouchableOpacity onPress={fetchRanking} style={styles.refreshBtn}>
-              <Text style={styles.refreshBtnText}>새로고침 🔄</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.rankingCard}>
-            {loadingRanking ? (
-              <View style={styles.rankingLoading}>
-                <ActivityIndicator size="small" color="#fbbf24" />
-                <Text style={styles.rankingLoadingText}>실시간 랭킹 집계 중...</Text>
-              </View>
-            ) : (
-              rankingList.map((item, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.rankingRow,
-                    idx !== rankingList.length - 1 && styles.rankingBorder
-                  ]}
-                  onPress={() => navigation.navigate('메뉴 추천')}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.rankBadgeRow}>
-                    <Text style={[
-                      styles.rankNumber,
-                      item.rank === 1 && styles.rankGold,
-                      item.rank === 2 && styles.rankSilver,
-                      item.rank === 3 && styles.rankBronze,
-                    ]}>
-                      {item.rank === 1 ? '👑 1' : `${item.rank}`}
-                    </Text>
-                    <Text style={styles.rankMenuEmoji}>{item.emoji}</Text>
-                    <View style={styles.rankMenuInfo}>
-                      <Text style={styles.rankMenuName}>{item.menuName}</Text>
-                      <Text style={styles.rankMenuCategory}>{item.category}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.rankCountWrapper}>
-                    <Text style={styles.rankCountText}>{item.count}회 선택됨</Text>
-                    <Text style={styles.rankArrow}>➔</Text>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-        </View>
-
-        {/* Section: Core Features */}
-        <Text style={styles.sectionTitle}>🎯 결정 장애 해결소</Text>
-
+        {/* 보조 영역: 다른 방법 */}
+        <Text style={styles.sectionTitle}>다른 방법으로 정하기</Text>
         <View style={styles.row}>
-          {/* Roulette Card */}
-          <TouchableOpacity 
-            style={[styles.featureCard, styles.goldCard]} 
-            onPress={() => navigation.navigate('메뉴 추천')}
-            activeOpacity={0.8}
+          <TouchableOpacity
+            style={styles.subCard}
+            onPress={() => navigation.navigate('월드컵')}
+            activeOpacity={0.85}
           >
-            <Text style={styles.featureEmoji}>🍔</Text>
-            <Text style={styles.featureTitle}>메뉴 추천 서비스</Text>
-            <Text style={styles.featureDesc}>룰렛, 퀴즈, 월드컵으로 완벽한 한 끼 선택!</Text>
-            <View style={styles.actionArrow}>
-              <Text style={styles.arrowText}>→</Text>
-            </View>
+            <Text style={styles.subEmoji}>🏆</Text>
+            <Text style={styles.subTitle}>메뉴 월드컵</Text>
+            <Text style={styles.subDesc}>둘 중 하나씩 골라요</Text>
           </TouchableOpacity>
-
-          {/* Map Card */}
-          <TouchableOpacity 
-            style={[styles.featureCard, styles.amberCard]} 
+          <TouchableOpacity
+            style={styles.subCard}
             onPress={() => navigation.navigate('지도')}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <Text style={styles.featureEmoji}>📍</Text>
-            <Text style={styles.featureTitle}>주변 식당 지도</Text>
-            <Text style={styles.featureDesc}>추천받은 맛집을 즉시 지도에서 확인!</Text>
-            <View style={styles.actionArrow}>
-              <Text style={styles.arrowText}>→</Text>
-            </View>
+            <Text style={styles.subEmoji}>📍</Text>
+            <Text style={styles.subTitle}>주변 식당</Text>
+            <Text style={styles.subDesc}>지도에서 바로 찾아요</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Mood Shortcuts */}
-        <Text style={styles.sectionTitle}>🔥 지금 내 상태는?</Text>
-        
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-          <TouchableOpacity style={styles.moodChip} onPress={() => navigation.navigate('메뉴 추천')}>
-            <Text style={styles.moodEmoji}>🌶️</Text>
-            <Text style={styles.moodText}>매운 게 당겨</Text>
+        {/* 보조 영역: 인기 랭킹 */}
+        <View style={styles.rankingHeaderRow}>
+          <Text style={styles.sectionTitleInline}>요즘 많이 고른 메뉴</Text>
+          <TouchableOpacity onPress={fetchRanking} style={styles.refreshBtn}>
+            <Text style={styles.refreshBtnText}>새로고침</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.moodChip} onPress={() => navigation.navigate('메뉴 추천')}>
-            <Text style={styles.moodEmoji}>🥗</Text>
-            <Text style={styles.moodText}>가볍게 먹고파</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.moodChip} onPress={() => navigation.navigate('메뉴 추천')}>
-            <Text style={styles.moodEmoji}>💸</Text>
-            <Text style={styles.moodText}>가성비 최고</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.moodChip} onPress={() => navigation.navigate('메뉴 추천')}>
-            <Text style={styles.moodEmoji}>🥩</Text>
-            <Text style={styles.moodText}>플렉스 할래</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        {/* History / Analytics Quick Preview */}
-        {isLoggedIn ? (
-          <TouchableOpacity 
-            style={styles.historyPreviewCard}
-            onPress={() => navigation.navigate('마이페이지')}
-          >
-            <View style={styles.historyRow}>
-              <View>
-                <Text style={styles.historyTitle}>📅 최근에 먹은 메뉴 & 마이페이지</Text>
-                <Text style={styles.historyDesc}>식사 히스토리를 확인하고 취향을 관리해 보세요.</Text>
-              </View>
-              <Text style={styles.historyArrow}>➔</Text>
+        </View>
+        <View style={styles.rankingCard}>
+          {loadingRanking ? (
+            <View style={styles.rankingLoading}>
+              <ActivityIndicator size="small" color={C.yolkDeep} />
+              <Text style={styles.rankingLoadingText}>랭킹을 불러오는 중이에요</Text>
             </View>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.historyPreviewCard, styles.goldPromoCard]}
+          ) : (
+            rankingList.map((item, idx) => (
+              <View
+                key={`${item.rank}-${item.menuName}`}
+                style={[
+                  styles.rankingRow,
+                  idx !== rankingList.length - 1 && styles.rankingBorder
+                ]}
+              >
+                <Text style={[styles.rankNumber, item.rank <= 3 && styles.rankTop]}>{item.rank}</Text>
+                <Text style={styles.rankMenuEmoji}>{item.emoji}</Text>
+                <Text style={styles.rankMenuName}>{item.menuName}</Text>
+                <Text style={styles.rankMenuCategory}>{item.category}</Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        {!isLoggedIn && (
+          <TouchableOpacity
+            style={styles.loginCard}
             onPress={() => navigation.navigate('마이페이지')}
+            activeOpacity={0.85}
           >
-            <View style={styles.historyRow}>
-              <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={styles.promoTitle}>🐣 메추리 요정의 미식 분석</Text>
-                <Text style={styles.promoDesc}>3초 카카오 연동으로 내가 먹은 식단 분석과 알레르기 필터를 이용해 보세요!</Text>
-              </View>
-              <View style={styles.promoGoBadge}>
-                <Text style={styles.promoGoText}>로그인 ➔</Text>
-              </View>
-            </View>
+            <Text style={styles.loginText}>카카오로 로그인하면 먹은 기록과 취향이 저장돼요.</Text>
+            <Text style={styles.loginGo}>로그인 ›</Text>
           </TouchableOpacity>
         )}
-
-        <Text style={styles.footer}>MeChuri - premium food recommendation app</Text>
       </ScrollView>
     </View>
   );
@@ -260,7 +219,7 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#1c1917', // Warm Dark Stone Onyx (따뜻한 블랙/돌색)
+    backgroundColor: C.cream,
   },
   container: {
     paddingHorizontal: 20,
@@ -270,335 +229,266 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 12,
   },
   appTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '900',
-    color: '#fbbf24', // Warm Amber Gold
+    color: C.feather,
     letterSpacing: 1,
   },
-  greeting: {
-    fontSize: 15,
-    color: '#cbd5e1',
-    marginTop: 4,
-    fontWeight: '500',
-  },
   profileBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(44, 40, 38, 0.9)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.15)', // Gold border
+    borderColor: C.line,
   },
   profileEmoji: {
-    fontSize: 22,
+    fontSize: 20,
   },
-  glassCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.75)', // Warm dark stone card
+  hero: {
+    backgroundColor: C.surface,
     borderRadius: 24,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.12)', // Subtle Gold border
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  bannerRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  bannerBadge: {
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    color: '#fbbf24', // Amber Gold
-    fontSize: 12,
-    fontWeight: '700',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  bannerTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#f8fafc',
-    marginBottom: 8,
-  },
-  bannerDesc: {
-    fontSize: 13,
-    color: '#a8a29e', // Soft warm gray
-    lineHeight: 20,
-    marginBottom: 18,
-  },
-  bannerButton: {
-    backgroundColor: '#f59e0b', // Vibrant Gold
-    borderRadius: 14,
-    paddingVertical: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: C.line,
+    marginBottom: 28,
   },
-  bannerButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
+  bubble: {
+    backgroundColor: C.shell,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    maxWidth: '100%',
+  },
+  bubbleText: {
+    color: C.ink,
+    fontSize: 15,
     fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  bubbleTail: {
+    position: 'absolute',
+    bottom: -6,
+    alignSelf: 'center',
+    width: 12,
+    height: 12,
+    backgroundColor: C.shell,
+    transform: [{ rotate: '45deg' }],
+  },
+  ctaButton: {
+    alignSelf: 'stretch',
+    backgroundColor: C.yolk,
+    borderRadius: 16,
+    borderBottomWidth: 4,
+    borderBottomColor: C.yolkDeep,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  ctaText: {
+    color: C.ink,
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  ctaHint: {
+    color: C.muted,
+    fontSize: 12.5,
+    marginTop: 10,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    color: '#f8fafc',
-    marginBottom: 16,
-    letterSpacing: 0.5,
+    color: C.ink,
+    marginBottom: 12,
+  },
+  sectionTitleInline: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.ink,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 32,
+    marginBottom: 28,
   },
-  featureCard: {
+  subCard: {
     width: '48%',
-    borderRadius: 22,
-    padding: 20,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  goldCard: {
-    backgroundColor: 'rgba(251, 191, 36, 0.06)', // Golden card
-    borderColor: 'rgba(251, 191, 36, 0.18)',
-  },
-  amberCard: {
-    backgroundColor: 'rgba(245, 158, 11, 0.06)', // Amber card
-    borderColor: 'rgba(245, 158, 11, 0.18)',
-  },
-  featureEmoji: {
-    fontSize: 28,
-    marginBottom: 10,
-  },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#f8fafc',
-    marginBottom: 6,
-  },
-  featureDesc: {
-    fontSize: 11,
-    color: '#a8a29e',
-    lineHeight: 16,
-    height: 48,
-  },
-  actionArrow: {
-    alignSelf: 'flex-end',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  arrowText: {
-    color: '#fbbf24',
-    fontWeight: 'bold',
-  },
-  horizontalScroll: {
-    paddingRight: 20,
-    marginBottom: 32,
-  },
-  moodChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(41, 37, 36, 0.6)',
+    backgroundColor: C.surface,
     borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginRight: 12,
+    padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.08)',
+    borderColor: C.line,
+    borderBottomWidth: 4,
   },
-  moodEmoji: {
-    fontSize: 16,
-    marginRight: 8,
+  subEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
   },
-  moodText: {
-    color: '#e2e8f0',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  historyPreviewCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.4)',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.08)',
-    marginBottom: 24,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#f8fafc',
+  subTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.ink,
     marginBottom: 4,
   },
-  historyDesc: {
-    fontSize: 11,
-    color: '#78716c', // Soft warm stone gray
-  },
-  historyArrow: {
-    color: '#fbbf24',
-    fontSize: 16,
-  },
-  footer: {
-    textAlign: 'center',
-    color: '#44403c',
-    fontSize: 11,
-    marginVertical: 10,
-  },
-  goldPromoCard: {
-    backgroundColor: 'rgba(251, 191, 36, 0.06)',
-    borderColor: 'rgba(251, 191, 36, 0.25)',
-    borderWidth: 1,
-  },
-  promoTitle: {
-    fontSize: 14.5,
-    fontWeight: '800',
-    color: '#fbbf24',
-    marginBottom: 4,
-  },
-  promoDesc: {
-    fontSize: 11.5,
-    color: '#a8a29e',
-    lineHeight: 16,
-  },
-  promoGoBadge: {
-    backgroundColor: '#fbbf24',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  promoGoText: {
-    color: '#1c1917',
-    fontSize: 11.5,
-    fontWeight: '800',
-  },
-  // Ranking Section Styles
-  rankingSection: {
-    marginBottom: 32,
+  subDesc: {
+    fontSize: 12,
+    color: C.muted,
   },
   rankingHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   refreshBtn: {
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
   refreshBtnText: {
-    color: '#a8a29e',
+    color: C.muted,
     fontSize: 12,
     fontWeight: '600',
   },
   rankingCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.75)',
-    borderRadius: 22,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.12)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
+    borderColor: C.line,
+    marginBottom: 20,
   },
   rankingLoading: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 30,
+    paddingVertical: 24,
   },
   rankingLoadingText: {
-    color: '#a8a29e',
+    color: C.muted,
     fontSize: 12,
     marginLeft: 8,
   },
   rankingRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 11,
   },
   rankingBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  rankBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+    borderBottomColor: C.line,
   },
   rankNumber: {
+    width: 22,
     fontSize: 14,
     fontWeight: '900',
-    color: '#a8a29e',
-    width: 38,
+    color: C.muted,
     textAlign: 'center',
   },
-  rankGold: {
-    color: '#fbbf24', // Gold
-  },
-  rankSilver: {
-    color: '#e2e8f0', // Silver
-  },
-  rankBronze: {
-    color: '#b45309', // Bronze
+  rankTop: {
+    color: C.yolkDeep,
   },
   rankMenuEmoji: {
-    fontSize: 24,
+    fontSize: 20,
     marginHorizontal: 10,
   },
-  rankMenuInfo: {
-    justifyContent: 'center',
-  },
   rankMenuName: {
-    color: '#f8fafc',
-    fontSize: 14.5,
-    fontWeight: '800',
+    flex: 1,
+    color: C.ink,
+    fontSize: 14,
+    fontWeight: '700',
   },
   rankMenuCategory: {
-    color: '#78716c',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 2,
+    color: C.muted,
+    fontSize: 11,
+    fontWeight: '600',
   },
-  rankCountWrapper: {
+  loginCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: C.shell,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
   },
-  rankCountText: {
-    color: '#a8a29e',
-    fontSize: 11.5,
-    marginRight: 8,
+  loginText: {
+    flex: 1,
+    color: C.ink,
+    fontSize: 12.5,
+    lineHeight: 18,
+    paddingRight: 8,
   },
-  rankArrow: {
-    color: '#57534e',
-    fontSize: 12,
-  }
+  loginGo: {
+    color: C.feather,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+});
+
+const quail = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+  },
+  plume: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: C.feather,
+    marginBottom: -8,
+  },
+  body: {
+    width: 104,
+    height: 92,
+    borderRadius: 52,
+    backgroundColor: C.quail,
+  },
+  belly: {
+    position: 'absolute',
+    bottom: 0,
+    left: 18,
+    right: 18,
+    height: 46,
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    backgroundColor: C.cream,
+  },
+  eye: {
+    position: 'absolute',
+    top: 30,
+    width: 9,
+    height: 11,
+    borderRadius: 5,
+    backgroundColor: C.ink,
+  },
+  cheek: {
+    position: 'absolute',
+    top: 44,
+    width: 12,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.blush,
+    opacity: 0.7,
+  },
+  beak: {
+    position: 'absolute',
+    top: 42,
+    alignSelf: 'center',
+    left: 46,
+    width: 12,
+    height: 9,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    backgroundColor: C.yolk,
+  },
 });
