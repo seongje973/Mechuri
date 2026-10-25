@@ -15,17 +15,19 @@ import { apiFetch } from '../api/client';
 import * as Location from 'expo-location';
 import MapView, { Marker, Callout } from 'react-native-maps';
 
+// 카카오 로컬 검색에는 평점이 없어서 평점은 받지도 보여주지도 않는다
 interface Restaurant {
   name: string;
-  rating: string;
-  distance: string;
+  distance?: string;
   category: string;
   url: string;
   address: string;
-  type: string;
+  type?: string;
   latitude: number;
   longitude: number;
 }
+
+const metaLine = (res: Restaurant) => [res.category, res.distance].filter(Boolean).join(' • ');
 
 interface MapScreenProps {
   route?: any;
@@ -40,13 +42,23 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
   const [loading, setLoading] = useState(true);
   const [locationName, setLocationName] = useState<string>('위치 스캔 중...');
   const [activeIndex, setActiveIndex] = useState<number>(0);
+  // 서버에서 식당을 못 받아오면 가짜 식당 대신 오류와 다시 시도 버튼을 보여준다
+  const [loadError, setLoadError] = useState(false);
+  // 개발용 샘플 데이터(RESTAURANT_MOCK)면 실제 식당이 아니라고 표시한다
+  const [isSample, setIsSample] = useState(false);
 
   const mapRef = useRef<MapView>(null);
   const flatListRef = useRef<FlatList>(null);
 
+  // 추천 결과에서 { keyword: 메뉴명, requestedAt } 으로 들어오면 그 메뉴로 다시 찾는다.
+  // requestedAt이 바뀌면 같은 메뉴여도 새로 찾는다. 키워드가 없으면 주변 맛집 전체.
+  const keyword: string | undefined = route?.params?.keyword?.trim() || undefined;
+  const requestedAt = route?.params?.requestedAt;
+  const requestIdRef = useRef(0);
+
   useEffect(() => {
-    loadNearbyRestaurants();
-  }, []);
+    loadNearbyRestaurants(keyword);
+  }, [keyword, requestedAt]);
 
   // Handle parameters from RecommendScreen
   useEffect(() => {
@@ -70,59 +82,80 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
         focusOnRestaurant(targetRes, 0);
       }, 800);
     }
-  }, [route?.params]);
+  }, [route?.params?.restaurant]);
 
-  const loadNearbyRestaurants = async () => {
+  const loadNearbyRestaurants = async (searchKeyword?: string) => {
+    // 응답이 늦게 온 이전 검색이 새 검색 결과를 덮어쓰지 않게 한다
+    const requestId = ++requestIdRef.current;
+    const isStale = () => requestId !== requestIdRef.current;
     setLoading(true);
+    setLoadError(false);
+    setIsSample(false);
+    setActiveIndex(0);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
       let lat = 37.497942; // Gangnam default
       let lng = 127.0276197;
 
-      if (status === 'granted') {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced
-        });
-        setUserCoords({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        });
-        lat = location.coords.latitude;
-        lng = location.coords.longitude;
-        setLocationName('내 위치 (실시간 GPS)');
-      } else {
-        setLocationName('강남역 중심 (권한 미승인)');
+      // GPS가 꺼져 있거나 실패해도 기본 위치로 검색은 계속한다
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (isStale()) return;
+        if (status === 'granted') {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced
+          });
+          if (isStale()) return;
+          setUserCoords({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude
+          });
+          lat = location.coords.latitude;
+          lng = location.coords.longitude;
+          setLocationName('내 위치 (실시간 GPS)');
+        } else {
+          setLocationName('강남역 중심 (권한 미승인)');
+        }
+      } catch (locationError) {
+        if (isStale()) return;
+        console.log('⚠️ Location unavailable, searching around default:', locationError);
+        setLocationName('강남역 중심 (위치 확인 실패)');
       }
 
-      // Fetch nearby eateries
-      const url = `/api/restaurants?keyword=${encodeURIComponent('맛집')}&x=${lng}&y=${lat}`;
+      // Fetch nearby eateries (서버가 반경 1.5km 안에서 찾는다)
+      const url = `/api/restaurants?keyword=${encodeURIComponent(searchKeyword || '맛집')}&x=${lng}&y=${lat}`;
       console.log('📡 Fetching maps data:', url);
 
       const response = await apiFetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setRestaurantsList(data.restaurants || []);
-      } else {
-        setRestaurantsList(getFallbackRestaurants(lat, lng));
-      }
+      if (isStale()) return;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (isStale()) return;
+      setRestaurantsList(data.restaurants || []);
+      setIsSample(data.mock === true);
+      focusRegion(lat, lng);
     } catch (error) {
-      console.log('❌ MapScreen load failed, using fallbacks:', error);
-      // Fallback with current position offsets
-      const fallbackLat = userCoords?.latitude || 37.497942;
-      const fallbackLng = userCoords?.longitude || 127.0276197;
-      setRestaurantsList(getFallbackRestaurants(fallbackLat, fallbackLng));
+      if (isStale()) return;
+      console.log('❌ MapScreen load failed:', error);
+      setRestaurantsList([]);
+      setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
   };
 
-  const getFallbackRestaurants = (lat: number, lng: number): Restaurant[] => {
-    return [
-      { name: '장수 가마솥 곰탕', rating: '⭐ 4.8', distance: '120m', category: '한식', url: 'https://m.map.kakao.com', address: '서울시 마포구 독막로 12', latitude: lat + 0.0012, longitude: lng - 0.0015, type: '주변 추천' },
-      { name: '풍성한 숯불 갈비', rating: '⭐ 4.7', distance: '340m', category: '고기구이', url: 'https://m.map.kakao.com', address: '서울시 마포구 독막로 28', latitude: lat - 0.0018, longitude: lng + 0.0011, type: '인기 매장' },
-      { name: '스시 마스터 초밥', rating: '⭐ 4.6', distance: '480m', category: '일식', url: 'https://m.map.kakao.com', address: '서울시 마포구 토정로 45', latitude: lat + 0.0009, longitude: lng + 0.0017, type: '리뷰 인기' },
-      { name: '나폴리 화덕 피자', rating: '⭐ 4.5', distance: '650m', category: '양식', url: 'https://m.map.kakao.com', address: '서울시 마포구 와우산로 88', latitude: lat - 0.0014, longitude: lng - 0.0013, type: '데이트 명소' },
-    ];
+  // 새로 찾은 결과 쪽으로 지도를 되돌리고 카드 목록을 처음으로 돌린다
+  const focusRegion = (lat: number, lng: number) => {
+    mapRef.current?.animateToRegion({
+      latitude: lat,
+      longitude: lng,
+      latitudeDelta: 0.02,
+      longitudeDelta: 0.02
+    }, 400);
+    flatListRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+  };
+
+  const clearKeyword = () => {
+    navigation?.setParams?.({ keyword: undefined, requestedAt: Date.now() });
   };
 
   const focusOnRestaurant = (res: Restaurant, index: number) => {
@@ -181,8 +214,20 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
         
         {/* Floating Top Header Bar */}
         <View style={styles.headerBar}>
-          <Text style={styles.headerTitle}>📍 {locationName}</Text>
-          <TouchableOpacity style={styles.refreshBtn} onPress={loadNearbyRestaurants} disabled={loading}>
+          <View style={styles.headerTextBox}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {keyword ? `🍽️ ${keyword} 근처 식당` : `📍 ${locationName}`}
+            </Text>
+            {keyword ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>📍 {locationName} · 반경 1.5km</Text>
+            ) : null}
+          </View>
+          {keyword ? (
+            <TouchableOpacity style={styles.clearBtn} onPress={clearKeyword} disabled={loading}>
+              <Text style={styles.clearBtnText}>전체 맛집</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => loadNearbyRestaurants(keyword)} disabled={loading}>
             <Text style={styles.refreshBtnText}>{loading ? '...' : '🔄'}</Text>
           </TouchableOpacity>
         </View>
@@ -223,7 +268,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
                     <Callout tooltip onPress={() => handleOpenMap(res)}>
                       <View style={styles.calloutBubble}>
                         <Text style={styles.calloutName}>{res.name}</Text>
-                        <Text style={styles.calloutMeta}>{res.category} • {res.rating}</Text>
+                        <Text style={styles.calloutMeta}>{metaLine(res)}</Text>
                         <Text style={styles.calloutAddress}>{res.address}</Text>
                         <Text style={styles.calloutLink}>📍 길찾기 ➔</Text>
                       </View>
@@ -237,6 +282,24 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 
         {/* Bottom Restaurants Card Panel */}
         <View style={styles.bottomPanel}>
+          {!loading && isSample ? (
+            <Text style={styles.sampleNotice}>개발용 샘플 데이터예요. 실제 식당이 아니에요.</Text>
+          ) : null}
+          {!loading && loadError ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요.</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => loadNearbyRestaurants(keyword)}>
+                <Text style={styles.retryBtnText}>다시 시도</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {!loading && !loadError && restaurantsList.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>
+                {keyword ? `반경 1.5km 안에 ${keyword} 식당이 없어요.` : '주변에서 식당을 찾지 못했어요.'}
+              </Text>
+            </View>
+          ) : null}
           <FlatList
             ref={flatListRef}
             data={restaurantsList}
@@ -256,10 +319,10 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
                 >
                   <View style={styles.cardHeader}>
                     <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.cardBadge}>{item.type}</Text>
+                    {item.type ? <Text style={styles.cardBadge}>{item.type}</Text> : null}
                   </View>
                   
-                  <Text style={styles.cardMeta}>{item.category} • {item.distance} • {item.rating}</Text>
+                  <Text style={styles.cardMeta}>{metaLine(item)}</Text>
                   <Text style={styles.cardAddress} numberOfLines={1}>{item.address}</Text>
                   
                   <TouchableOpacity style={styles.findRoadBtn} onPress={() => handleOpenMap(item)}>
@@ -306,10 +369,69 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
+  headerTextBox: {
+    flex: 1,
+    paddingRight: 8,
+  },
   headerTitle: {
     color: '#fbbf24',
     fontWeight: '800',
     fontSize: 13.5,
+  },
+  headerSubtitle: {
+    color: '#a8a29e',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  clearBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.4)',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginRight: 8,
+  },
+  clearBtnText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  emptyCard: {
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(41, 37, 36, 0.95)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#a8a29e',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sampleNotice: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(41, 37, 36, 0.95)',
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: '#fbbf24',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  retryBtnText: {
+    color: '#1c1917',
+    fontSize: 13,
+    fontWeight: '800',
   },
   refreshBtn: {
     padding: 2,
