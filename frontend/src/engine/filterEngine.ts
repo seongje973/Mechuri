@@ -1,9 +1,9 @@
-import { MenuItem } from '../constants/menuData';
-import { MenuProperty } from '../constants/akinatorQuestions';
+import { MenuItem, getAvoidTags } from '../constants/menuData';
+import { Question, matchesQuestion } from '../constants/akinatorQuestions';
 
 /**
  * 현재(필터 방식) 추천 로직. 화면 없이 테스트할 수 있도록 RecommendScreen에서 옮겨 왔다.
- * S1에서 점수 방식 엔진으로 바꿀 때 이 파일의 테스트가 기존 동작의 기준이 된다.
+ * 새 점수 방식 엔진은 scoreEngine.ts. 화면은 S2(US-11~14)에서 그쪽으로 옮기고 나면 이 파일을 지운다.
  */
 
 export type Answer = 'yes' | 'no' | 'dontknow';
@@ -33,7 +33,7 @@ export const buildInitialPool = (
     pool = pool.filter(item => !excludedCategories.includes(item.category));
   }
   if (avoidTags.length > 0) {
-    const filtered = pool.filter(item => !item.tags.some(tag => avoidTags.includes(tag)));
+    const filtered = pool.filter(item => !getAvoidTags(item).some(tag => avoidTags.includes(tag)));
     if (filtered.length > 0) pool = filtered;
   }
   return pool;
@@ -42,16 +42,16 @@ export const buildInitialPool = (
 /** 후보를 "예/아니오" 반반에 가장 가깝게 나누는 질문. 더 물을 게 없으면 null. */
 export const pickNextQuestion = (
   pool: MenuItem[],
-  questions: MenuProperty[],
+  questions: Question[],
   askedIds: string[]
-): MenuProperty | null => {
+): Question | null => {
   const remaining = questions.filter(q => !askedIds.includes(q.id));
   if (remaining.length === 0 || pool.length <= 1) return null;
 
-  let best: MenuProperty | null = null;
+  let best: Question | null = null;
   let minDeviation = Infinity;
   remaining.forEach(q => {
-    const yesCount = pool.filter(item => q.check(item)).length;
+    const yesCount = pool.filter(item => matchesQuestion(item, q)).length;
     const deviation = Math.abs(yesCount - (pool.length - yesCount));
     if (deviation < minDeviation) {
       minDeviation = deviation;
@@ -62,10 +62,10 @@ export const pickNextQuestion = (
 };
 
 /** 답에 맞는 후보만 남긴다. 모두 지워지면 이전 후보를 그대로 둔다. */
-export const applyAnswer = (pool: MenuItem[], question: MenuProperty, answer: Answer): MenuItem[] => {
+export const applyAnswer = (pool: MenuItem[], question: Question, answer: Answer): MenuItem[] => {
   let next = pool;
-  if (answer === 'yes') next = pool.filter(item => question.check(item));
-  else if (answer === 'no') next = pool.filter(item => !question.check(item));
+  if (answer === 'yes') next = pool.filter(item => matchesQuestion(item, question));
+  else if (answer === 'no') next = pool.filter(item => !matchesQuestion(item, question));
   return next.length === 0 ? [...pool] : next;
 };
 

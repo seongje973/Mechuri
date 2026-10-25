@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { apiFetch, getAuthToken, saveSession, saveProfile } from '../api/client';
 import { prepareKakaoLoginState } from '../api/kakaoLogin';
+import { AVOID_TAG_OPTIONS } from '../constants/menuData';
 import { KAKAO_CLIENT_ID, KAKAO_REDIRECT_URI } from '../constants/env';
 
 interface MyPageScreenProps {
@@ -247,7 +248,7 @@ export default function MyPageScreen({
     if (!userProfile) return;
     
     const activeTags = userProfile.avoidTags ? userProfile.avoidTags.split(',').filter(Boolean) : [];
-    const availableTags = ["매운맛", "오이", "가지", "밀가루", "해산물"];
+    const availableTags: string[] = AVOID_TAG_OPTIONS;
 
     const toggleTag = async (tag: string) => {
       let newTags = [...activeTags];
@@ -288,7 +289,7 @@ export default function MyPageScreen({
         "🚫 알레르기 및 기피 설정 (3/3)",
         `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
         [
-          ...buttons.slice(4, 5),
+          ...buttons.slice(4, 6),
           { text: "닫기", style: "cancel" }
         ]
       );
