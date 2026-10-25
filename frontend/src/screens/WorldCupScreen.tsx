@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -30,6 +30,7 @@ interface Restaurant {
 
 // 위치를 못 받았을 때 쓰는 기본 위치 (강남역). 화면에도 그렇게 표시한다
 const DEFAULT_COORDS = { latitude: 37.497942, longitude: 127.0276197 };
+const RESTAURANTS_TIMEOUT_MS = 8000;
 
 interface WorldCupScreenProps {
   navigation: any;
@@ -60,6 +61,10 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   const [restaurantsList, setRestaurantsList] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
   const [restaurantsError, setRestaurantsError] = useState(false);
+  // 검색할 때 실제로 내 위치를 썼는지 (제목 표시용)
+  const [searchedNearUser, setSearchedNearUser] = useState(false);
+  // 가장 최근 식당 검색의 번호. 지난 검색의 늦은 응답이 화면을 덮어쓰지 않게 한다
+  const restaurantsRequestId = useRef(0);
 
   // 컴포넌트 마운트 시 위치 권한 요청 및 좌표 획득
   useEffect(() => {
@@ -84,6 +89,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
   // 게임 시작 설정
   const startWorldCup = (rounds: 8 | 16) => {
+    restaurantsRequestId.current += 1;
     setTotalRounds(rounds);
     
     // 전체 메뉴 데이터에서 랜덤 셔플 후 필요한 개수만큼 추출
@@ -130,21 +136,36 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
   // 주변 식당 검색. 실패하면 지어낸 식당 대신 오류와 다시 시도 버튼을 보여 준다
   const loadRestaurants = async (menuName: string) => {
+    const requestId = ++restaurantsRequestId.current;
+    const isLatest = () => requestId === restaurantsRequestId.current;
     setLoadingRestaurants(true);
     setRestaurantsError(false);
     setRestaurantsList([]);
+    setSearchedNearUser(!!userCoords);
+
+    // 본문 읽기까지 포함해 8초가 지나면 실패로 본다
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('restaurants timeout')), RESTAURANTS_TIMEOUT_MS);
+    });
     try {
       const { latitude, longitude } = userCoords ?? DEFAULT_COORDS;
       const url = `/api/restaurants?keyword=${encodeURIComponent(menuName)}&x=${longitude}&y=${latitude}`;
-      const response = await apiFetch(url, { timeoutMs: 8000 });
-      if (!response.ok) throw new Error(`restaurants ${response.status}`);
-      const data = await response.json();
-      setRestaurantsList(data.restaurants || []);
+      const data = await Promise.race([
+        (async () => {
+          const response = await apiFetch(url, { timeoutMs: RESTAURANTS_TIMEOUT_MS });
+          if (!response.ok) throw new Error(`restaurants ${response.status}`);
+          return response.json();
+        })(),
+        timeout,
+      ]);
+      if (isLatest()) setRestaurantsList(data.restaurants || []);
     } catch (error) {
       console.log("Failed to load restaurants for WorldCup winner", error);
-      setRestaurantsError(true);
+      if (isLatest()) setRestaurantsError(true);
     } finally {
-      setLoadingRestaurants(false);
+      clearTimeout(timer);
+      if (isLatest()) setLoadingRestaurants(false);
     }
   };
 
@@ -371,7 +392,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
           {/* 주변 식당 매칭 */}
           <View style={styles.restaurantsSection}>
             <Text style={styles.restaurantsTitle}>
-              📍 {userCoords ? '내 주변' : '강남역 근처 (위치 권한 없음)'} {winnerMenu.name} 식당
+              📍 {searchedNearUser ? '내 주변' : '강남역 근처 (위치 권한 없음)'} {winnerMenu.name} 식당
             </Text>
 
             {loadingRestaurants ? (
