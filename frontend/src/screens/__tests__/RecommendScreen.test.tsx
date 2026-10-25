@@ -145,5 +145,30 @@ describe('RecommendScreen', () => {
     expect(alert).toHaveBeenCalled();
     alert.mockRestore();
   });
-});
 
+  it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    let finish!: (v: unknown) => void;
+    apiFetch.mockClear();
+    apiFetch.mockImplementationOnce(() => new Promise(r => (finish = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      finish({ ok: true, status: 201, json: async () => ({}) });
+    });
+    const posts = apiFetch.mock.calls.filter((c: any[]) => c[0] === '/api/user/histories');
+    expect(posts).toHaveLength(1);
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+  });
+});
