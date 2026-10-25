@@ -3,6 +3,8 @@ import { Platform, View, ActivityIndicator, Linking } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { apiFetch, clearSession, getAuthToken, getStoredProfile, saveSession } from '../api/client';
 import { exchangeKakaoLoginCode } from '../api/kakaoLogin';
+import { parseRoomCodeFromUrl } from '../api/rooms';
+import { navigationRef } from './navigationRef';
 
 // Import Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -10,12 +12,15 @@ import RecommendScreen from '../screens/RecommendScreen';
 import WorldCupScreen from '../screens/WorldCupScreen';
 import MapScreen from '../screens/MapScreen';
 import MyPageScreen from '../screens/MyPageScreen';
+import GroupScreen from '../screens/GroupScreen';
 
 const Tab = createBottomTabNavigator();
 
 export default function AppNavigator() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  // 같이 정하기 초대 링크 (mechuri://room/CODE)
+  const [invite, setInvite] = useState<{ code: string; at: number } | null>(null);
 
   // Check login session on mount
   useEffect(() => {
@@ -65,6 +70,11 @@ export default function AppNavigator() {
       if (!url) return;
       try {
         console.log("🔗 Deep Link Received in AppNavigator:", url);
+        const roomCode = parseRoomCodeFromUrl(url);
+        if (roomCode) {
+          setInvite({ code: roomCode, at: Date.now() });
+          return;
+        }
         // Look for auth callback trigger
         if (url.includes('auth') && url.includes('?')) {
           const queryString = url.split('?')[1];
@@ -109,6 +119,22 @@ export default function AppNavigator() {
       subscription.remove();
     };
   }, []);
+
+  // 앱이 막 켜져서 탭이 아직 없으면 준비될 때까지 잠깐 기다렸다가 옮긴다
+  useEffect(() => {
+    if (!invite || isLoggedIn === null) return;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const go = () => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('같이', { inviteCode: invite.code, invitedAt: invite.at });
+      } else if (tries++ < 20) {
+        timer = setTimeout(go, 100);
+      }
+    };
+    go();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [invite, isLoggedIn]);
 
   const handleLoginSuccess = async () => {
     try {
@@ -198,6 +224,15 @@ export default function AppNavigator() {
         {props => <WorldCupScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
       </Tab.Screen>
       
+      <Tab.Screen
+        name="같이"
+        options={{
+          tabBarLabel: '👥 같이',
+        }}
+      >
+        {props => <GroupScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
+      </Tab.Screen>
+
       <Tab.Screen 
         name="지도" 
         component={MapScreen}
