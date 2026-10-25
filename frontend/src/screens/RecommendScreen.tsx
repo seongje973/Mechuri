@@ -51,22 +51,17 @@ const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
   { answer: 'no', label: '👎 아니오' }
 ];
 
+// /api/restaurants 응답 (backend/src/routes/restaurant.js). 평점은 주지 않고, type은 있을 때만 온다
 interface Restaurant {
   name: string;
-  rating: string;
   distance: string;
   category: string;
   url: string;
   address: string;
-  type: string;
+  latitude?: number;
+  longitude?: number;
+  type?: string;
 }
-
-const getOfflineFallbackRestaurants = (menuName: string): Restaurant[] => {
-  return [
-    { name: `가마솥 전통 ${menuName} 마포본점`, rating: '⭐ 4.8', distance: '150m', category: '음식점', url: `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(menuName)}`, address: '서울시 마포구 역삼로', type: '오프라인 추천' },
-    { name: `소문난 3대 맛집 ${menuName}`, rating: '⭐ 4.6', distance: '380m', category: '전문 식당', url: `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(menuName)}`, address: '서울시 강남구 테헤란로', type: '인기 매장' },
-  ];
-};
 
 interface RecommendScreenProps {
   navigation: any;
@@ -133,12 +128,16 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
   // 추천 시작은 기피 태그를 기다린 뒤 좌표를 읽는다. 그사이 잡힌 GPS를 놓치지 않게 최신 값을 따로 둔다
   const userCoordsRef = useRef<{ latitude: number, longitude: number } | null>(null);
-  const updateUserCoords = (coords: { latitude: number, longitude: number }) => {
+  const updateUserCoords = (coords: { latitude: number, longitude: number } | null) => {
     userCoordsRef.current = coords;
     setUserCoords(coords);
   };
   const [restaurantsList, setRestaurantsList] = useState<Restaurant[]>([]);
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  // 식당 검색이 실패했는지. 실패하면 가짜 식당 대신 다시 시도 버튼을 보여 준다
+  const [restaurantError, setRestaurantError] = useState(false);
+  // 지금 보이는 식당 목록을 강남역 기준으로 찾았는지. 검색 뒤에 GPS가 잡혀도 제목이 바뀌지 않게 검색할 때 정한다
+  const [restaurantFallback, setRestaurantFallback] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -202,9 +201,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
         });
+      } else {
+        // 권한이 없으면 예전 좌표로 "내 주변"이라고 찾지 않는다
+        updateUserCoords(null);
       }
     } catch (e) {
       console.log('GPS Refresh Failed');
+      updateUserCoords(null);
     }
   };
 
@@ -442,10 +445,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       .catch(() => {});
     setLoadingRestaurants(true);
     setRestaurantsList([]);
+    setRestaurantError(false);
+
+    const coords = userCoordsRef.current;
+    setRestaurantFallback(!coords);
 
     try {
-      const lat = userCoords?.latitude || '37.497942';
-      const lng = userCoords?.longitude || '127.0276197';
+      const lat = coords?.latitude ?? '37.497942';
+      const lng = coords?.longitude ?? '127.0276197';
       const url = `/api/restaurants?keyword=${encodeURIComponent(menu.name)}&x=${lng}&y=${lat}`;
 
       const response = await apiFetch(url);
@@ -453,10 +460,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         const data = await response.json();
         if (isLatest()) setRestaurantsList(data.restaurants || []);
       } else if (isLatest()) {
-        setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
+        setRestaurantError(true);
       }
     } catch (error) {
-      if (isLatest()) setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
+      if (isLatest()) setRestaurantError(true);
     } finally {
       if (isLatest()) setLoadingRestaurants(false);
     }
@@ -776,8 +783,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           {selectedMenu && (
             <View style={styles.restaurantsSection}>
               <Text style={styles.restaurantSectionTitle}>
-                📍 내 GPS 주변 실제 {selectedMenu.name} 식당 목록
+                📍 {restaurantFallback ? '강남역 근처' : '내 주변'} {selectedMenu.name} 식당
               </Text>
+              {restaurantFallback && (
+                <Text style={styles.restaurantHint}>현재 위치를 확인하지 못해 강남역 기준으로 찾았어요</Text>
+              )}
               
               {loadingRestaurants ? (
                 <View style={styles.loadingContainer}>
@@ -792,9 +802,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                         <View style={{ flex: 1, paddingRight: 8 }}>
                           <View style={styles.resBadgeRow}>
                             <Text style={styles.resName} numberOfLines={1}>{res.name}</Text>
-                            <Text style={styles.resBadge}>{res.type}</Text>
+                            {!!res.type && <Text style={styles.resBadge}>{res.type}</Text>}
                           </View>
-                          <Text style={styles.resMeta} numberOfLines={1}>{res.rating} • {res.distance} • {res.category}</Text>
+                          <Text style={styles.resMeta} numberOfLines={1}>{[res.distance, res.category].filter(Boolean).join(' • ')}</Text>
                           <Text style={styles.resAddress} numberOfLines={1}>{res.address}</Text>
                         </View>
                         
@@ -807,9 +817,26 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                       </View>
                     </View>
                   ))
+                ) : restaurantError ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>식당 정보를 불러오지 못했어요</Text>
+                    <View style={styles.emptyActions}>
+                      <TouchableOpacity style={styles.emptyButton} onPress={() => onSelectMenu(selectedMenu)}>
+                        <Text style={styles.emptyButtonText}>다시 시도</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.emptyButton} onPress={() => handleOpenBaemin(selectedMenu.name)}>
+                        <Text style={styles.emptyButtonText}>배달로 찾기</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 ) : (
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>근처 1.5km 이내에 가게를 찾지 못했습니다.</Text>
+                    <Text style={styles.emptyText}>근처 1.5km 안에 {selectedMenu.name} 가게가 없어요</Text>
+                    <View style={styles.emptyActions}>
+                      <TouchableOpacity style={styles.emptyButton} onPress={() => handleOpenBaemin(selectedMenu.name)}>
+                        <Text style={styles.emptyButtonText}>배달로 찾기</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )
               )}
@@ -1306,8 +1333,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: '#78716c',
+    color: '#a8a29e',
     fontSize: 11.5,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  emptyButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  emptyButtonText: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  restaurantHint: {
+    color: '#a8a29e',
+    fontSize: 11,
+    marginTop: -6,
+    marginBottom: 10,
   },
   retryButton: {
     borderColor: 'rgba(255, 255, 255, 0.08)',

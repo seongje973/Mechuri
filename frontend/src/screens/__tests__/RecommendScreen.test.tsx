@@ -704,5 +704,85 @@ describe('RecommendScreen', () => {
       expect(await screen.findByText('당신이 생각한 메뉴는…', {}, { timeout: 3000 })).toBeTruthy();
     });
   });
-});
 
+  describe('주변 식당 목록 상태', () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const restaurantCalls = () => apiFetch.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/restaurants'));
+    afterEach(() => {
+      apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+    });
+
+    it('검색이 실패하면 가짜 식당 대신 다시 시도 버튼을 보여 준다', async () => {
+      apiFetch.mockImplementation(async (path: string) =>
+        String(path).startsWith('/api/restaurants')
+          ? { ok: false, status: 502, json: async () => ({}) }
+          : { ok: true, json: async () => ({ histories: [] }) }
+      );
+      await reachReveal();
+      expect(screen.getByText('식당 정보를 불러오지 못했어요')).toBeTruthy();
+      expect(screen.queryByText(/가마솥|소문난/)).toBeNull();
+
+      apiFetch.mockClear();
+      apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [] }) }));
+      await act(async () => {
+        fireEvent.press(screen.getByText('다시 시도'));
+      });
+      expect(restaurantCalls()).toHaveLength(1);
+      expect(screen.queryByText('식당 정보를 불러오지 못했어요')).toBeNull();
+      expect(screen.getByText(/가게가 없어요$/)).toBeTruthy();
+    });
+
+    it('평점 없이 온 식당도 거리·분류만 깔끔하게 보여 준다', async () => {
+      apiFetch.mockImplementation(async (path: string) =>
+        String(path).startsWith('/api/restaurants')
+          ? { ok: true, json: async () => ({ restaurants: [{ name: '진짜식당', distance: '350m', category: '한식', url: 'https://place.map.kakao.com/1', address: '서울 강남구' }] }) }
+          : { ok: true, json: async () => ({ histories: [] }) }
+      );
+      await reachReveal();
+      expect(screen.getByText('진짜식당')).toBeTruthy();
+      expect(screen.getByText('350m • 한식')).toBeTruthy();
+    });
+
+    it('위치를 확인하지 못하면 강남역 기준이라고 알려 준다', async () => {
+      await reachReveal();
+      expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
+      expect(restaurantCalls().at(-1)![0]).toContain('x=127.0276197&y=37.497942');
+    });
+
+    it('다시 시작할 때 위치 권한이 없으면 예전 좌표를 버리고 강남역 기준으로 찾는다', async () => {
+      const Location = jest.requireMock('expo-location');
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(async () => ({ status: 'granted' }));
+      Location.getCurrentPositionAsync.mockImplementationOnce(async () => ({ coords: { latitude: 35.1, longitude: 129.0 } }));
+      jest.requireMock('../../api/client').apiFetch.mockClear();
+      await reachReveal();
+      expect(restaurantCalls()[0][0]).toContain('x=129&y=35.1');
+      await act(async () => {
+        fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+      });
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+      }
+      expect(restaurantCalls().at(-1)![0]).toContain('x=127.0276197&y=37.497942');
+      expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
+    });
+
+    it('강남역 기준으로 찾은 뒤에 GPS가 잡혀도 목록 제목은 검색한 기준을 따른다', async () => {
+      const Location = jest.requireMock('expo-location');
+      let grant!: (v: unknown) => void;
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(() => new Promise(r => (grant = r)));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      await reachReveal();
+      expect(screen.getByText(/강남역 근처/)).toBeTruthy();
+      await act(async () => {
+        grant({ status: 'granted' });
+      });
+      expect(screen.getByText(/강남역 근처/)).toBeTruthy();
+      expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
+    });
+  });
+});
