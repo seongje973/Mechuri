@@ -12,7 +12,8 @@ export const recentMealAdjustments = (meals: MealRecord[], now: number = Date.no
   const adjustments: Record<string, number> = {};
   meals.forEach(meal => {
     const eatenAt = new Date(meal.createdAt).getTime();
-    if (Number.isNaN(eatenAt) || now - eatenAt > RECENT_MEAL_DAYS * DAY_MS) return;
+    const elapsed = now - eatenAt;
+    if (Number.isNaN(eatenAt) || elapsed < 0 || elapsed > RECENT_MEAL_DAYS * DAY_MS) return;
     adjustments[meal.menuName] = RECENT_MEAL_PENALTY; // 여러 번 먹어도 한 번만 감점
   });
   return adjustments;
