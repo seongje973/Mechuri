@@ -130,6 +130,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [loadingRestaurants, setLoadingRestaurants] = useState(false);
   // 식당 검색이 실패했는지. 실패하면 가짜 식당 대신 다시 시도 버튼을 보여 준다
   const [restaurantError, setRestaurantError] = useState(false);
+  // 지금 보이는 식당 목록을 강남역 기준으로 찾았는지. 검색 뒤에 GPS가 잡혀도 제목이 바뀌지 않게 검색할 때 정한다
+  const [restaurantFallback, setRestaurantFallback] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -409,9 +411,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setRestaurantsList([]);
     setRestaurantError(false);
 
+    const coords = userCoordsRef.current;
+    setRestaurantFallback(!coords);
+
     try {
-      const lat = userCoords?.latitude || '37.497942';
-      const lng = userCoords?.longitude || '127.0276197';
+      const lat = coords?.latitude ?? '37.497942';
+      const lng = coords?.longitude ?? '127.0276197';
       const url = `/api/restaurants?keyword=${encodeURIComponent(menu.name)}&x=${lng}&y=${lat}`;
 
       const response = await apiFetch(url);
@@ -740,9 +745,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           {selectedMenu && (
             <View style={styles.restaurantsSection}>
               <Text style={styles.restaurantSectionTitle}>
-                📍 {userCoords ? '내 주변' : '강남역 근처'} {selectedMenu.name} 식당
+                📍 {restaurantFallback ? '강남역 근처' : '내 주변'} {selectedMenu.name} 식당
               </Text>
-              {!userCoords && (
+              {restaurantFallback && (
                 <Text style={styles.restaurantHint}>위치 권한이 꺼져 있어 강남역 기준으로 찾았어요</Text>
               )}
               
@@ -1306,7 +1311,7 @@ const styles = StyleSheet.create({
     borderColor: '#fbbf24',
   },
   emptyButtonText: {
-    color: '#b45309',
+    color: '#fbbf24',
     fontSize: 12,
     fontWeight: '700',
   },

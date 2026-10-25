@@ -464,5 +464,19 @@ describe('RecommendScreen', () => {
       await reachReveal();
       expect(screen.getByText('위치 권한이 꺼져 있어 강남역 기준으로 찾았어요')).toBeTruthy();
     });
+
+    it('강남역 기준으로 찾은 뒤에 GPS가 잡혀도 목록 제목은 검색한 기준을 따른다', async () => {
+      const Location = jest.requireMock('expo-location');
+      let grant!: (v: unknown) => void;
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(() => new Promise(r => (grant = r)));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      await reachReveal();
+      expect(screen.getByText(/강남역 근처/)).toBeTruthy();
+      await act(async () => {
+        grant({ status: 'granted' });
+      });
+      expect(screen.getByText(/강남역 근처/)).toBeTruthy();
+      expect(screen.getByText('위치 권한이 꺼져 있어 강남역 기준으로 찾았어요')).toBeTruthy();
+    });
   });
 });
