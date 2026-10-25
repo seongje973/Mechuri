@@ -122,6 +122,26 @@ describe('MapScreen', () => {
     expect(allText(renderer)).not.toContain('김치찌개 식당');
   });
 
+  it('늦게 끝난 이전 검색이 위치 표시를 덮어쓰지 않는다', async () => {
+    const Location = require('expo-location');
+    let grantFirst: (v: any) => void = () => {};
+    Location.requestForegroundPermissionsAsync
+      .mockImplementationOnce(() => new Promise((resolve) => { grantFirst = resolve; }))
+      .mockResolvedValueOnce({ status: 'denied' });
+    Location.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 35.1, longitude: 129.0 } });
+    mockedFetch.mockResolvedValue(okResponse(['아무 식당']));
+    const { renderer, navigation } = await renderMap({ keyword: '김치찌개', requestedAt: 1 });
+    await act(async () => {
+      renderer.update(<MapScreen route={{ params: { keyword: '초밥', requestedAt: 2 } }} navigation={navigation} />);
+    });
+    await act(async () => {
+      grantFirst({ status: 'granted' });
+    });
+    expect(allText(renderer)).toContain('강남역 중심 (권한 미승인)');
+    expect(allText(renderer)).not.toContain('실시간 GPS');
+    expect(requestedKeywords()).toEqual(['초밥']);
+  });
+
   it('검색 결과가 없으면 안내 문구를 보여준다', async () => {
     mockedFetch.mockResolvedValue(okResponse([]));
     const { renderer } = await renderMap({ keyword: '마라탕', requestedAt: 1 });

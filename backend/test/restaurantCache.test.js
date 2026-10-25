@@ -98,6 +98,14 @@ test('failed Kakao calls are not cached', async () => {
   assert.strictEqual(kakaoCalls.length, 2);
 });
 
+test('array or blank keyword is rejected with 400', async () => {
+  const array = await fetch(`${baseUrl}?keyword=a&keyword=b`);
+  const blank = await fetch(`${baseUrl}?keyword=%20`);
+  assert.strictEqual(array.status, 400);
+  assert.strictEqual(blank.status, 400);
+  assert.strictEqual(kakaoCalls.length, 0);
+});
+
 test('cache key rounds coordinates to about 100m and trims the keyword', () => {
   assert.strictEqual(buildCacheKey(' 김치찌개 ', '127.02761', '37.49794'), '127.028,37.498|김치찌개');
 });

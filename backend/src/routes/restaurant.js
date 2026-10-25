@@ -35,7 +35,8 @@ const writeCache = (key, body) => {
 router.get('/', async (req, res) => {
   const { keyword, x, y } = req.query;
 
-  if (!keyword) {
+  // ?keyword=a&keyword=b 처럼 배열로 오면 거절한다
+  if (typeof keyword !== 'string' || !keyword.trim()) {
     return res.status(400).json({ error: 'Keyword query parameter is required.' });
   }
 

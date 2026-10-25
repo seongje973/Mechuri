@@ -86,6 +86,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
     setActiveIndex(0);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
+      if (isStale()) return;
       let lat = 37.497942; // Gangnam default
       let lng = 127.0276197;
 
@@ -93,6 +94,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced
         });
+        if (isStale()) return;
         setUserCoords({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
