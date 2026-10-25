@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View, Alert, Acti
 import { devKakaoLogin, openKakaoLogin } from '../api/kakaoLogin';
 import { saveSession } from '../api/client';
 import { LoginPromptReason } from '../storage/loginPrompt';
-import { colors, radii } from '../theme/colors';
+import { colors, fonts, radii } from '../theme';
 
 interface LoginSheetProps {
   visible: boolean;
@@ -96,8 +96,8 @@ const styles = StyleSheet.create({
   },
   grabber: { width: 44, height: 5, borderRadius: radii.full, backgroundColor: colors.line, marginBottom: 16 },
   mascot: { fontSize: 44, marginBottom: 8 },
-  title: { fontSize: 21, fontWeight: '800', color: colors.ink, textAlign: 'center', marginBottom: 8 },
-  body: { fontSize: 14.5, lineHeight: 22, color: colors.muted, textAlign: 'center', marginBottom: 22 },
+  title: { fontFamily: fonts.display, fontSize: 24, lineHeight: 32, color: colors.ink, textAlign: 'center', marginBottom: 8 },
+  body: { fontFamily: fonts.body, fontSize: 14.5, lineHeight: 22, color: colors.muted, textAlign: 'center', marginBottom: 22 },
   kakaoBtn: {
     alignSelf: 'stretch',
     backgroundColor: colors.kakao,
@@ -107,9 +107,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  kakaoText: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  kakaoText: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
   devBtn: { marginTop: 14, padding: 6 },
-  devText: { fontSize: 13, color: colors.feather, textDecorationLine: 'underline' },
+  devText: { fontFamily: fonts.body, fontSize: 13, color: colors.feather, textDecorationLine: 'underline' },
   laterBtn: { marginTop: 10, padding: 8 },
-  laterText: { fontSize: 13.5, color: colors.muted },
+  laterText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.muted },
 });
