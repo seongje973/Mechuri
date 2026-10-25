@@ -554,9 +554,9 @@ describe('RecommendScreen', () => {
       expect(screen.getByText('350m • 한식')).toBeTruthy();
     });
 
-    it('위치 권한이 없으면 강남역 기준이라고 알려 준다', async () => {
+    it('위치를 확인하지 못하면 강남역 기준이라고 알려 준다', async () => {
       await reachReveal();
-      expect(screen.getByText('위치 권한이 꺼져 있어 강남역 기준으로 찾았어요')).toBeTruthy();
+      expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
     });
 
     it('강남역 기준으로 찾은 뒤에 GPS가 잡혀도 목록 제목은 검색한 기준을 따른다', async () => {
@@ -570,7 +570,7 @@ describe('RecommendScreen', () => {
         grant({ status: 'granted' });
       });
       expect(screen.getByText(/강남역 근처/)).toBeTruthy();
-      expect(screen.getByText('위치 권한이 꺼져 있어 강남역 기준으로 찾았어요')).toBeTruthy();
+      expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
     });
   });
 });

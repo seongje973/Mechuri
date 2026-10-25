@@ -747,7 +747,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                 📍 {restaurantFallback ? '강남역 근처' : '내 주변'} {selectedMenu.name} 식당
               </Text>
               {restaurantFallback && (
-                <Text style={styles.restaurantHint}>위치 권한이 꺼져 있어 강남역 기준으로 찾았어요</Text>
+                <Text style={styles.restaurantHint}>현재 위치를 확인하지 못해 강남역 기준으로 찾았어요</Text>
               )}
               
               {loadingRestaurants ? (
