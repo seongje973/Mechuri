@@ -82,6 +82,8 @@ router.post('/', async (req, res) => {
       let code = null;
       for (let i = 0; i < CODE_ATTEMPTS && !code; i++) {
         const candidate = generateRoomCode();
+        // 같은 코드를 동시에 고르는 두 요청이 둘 다 통과하지 않게 (코드에 unique 제약이 없어서)
+        await sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:code))', { replacements: { code: candidate }, transaction });
         if (!(await findLiveRoom(candidate, { transaction }))) code = candidate;
       }
       if (!code) throw new Error('Could not allocate a room code.');
@@ -151,8 +153,14 @@ router.post('/:code/join', async (req, res) => {
 
     if (outcome.status !== 201) return res.status(outcome.status).json(outcome.body);
 
-    // 대기실이 열려 있으면 목록에 바로 보이게
     const session = getRoomRegistry()?.get(outcome.room.id);
+    // 시작은 메모리에서 먼저 일어나고 DB 저장은 뒤따르므로, DB가 아직 waiting이어도
+    // 그 사이에 시작했을 수 있다. 이 확인과 addParticipant 사이에는 await가 없어서 시작이 끼어들지 못한다.
+    if (session && session.status !== 'waiting') {
+      await outcome.participant.destroy();
+      return res.status(409).json({ error: '이미 시작한 방이에요.', reason: 'ALREADY_STARTED' });
+    }
+    // 대기실이 열려 있으면 목록에 바로 보이게
     if (session) session.addParticipant(toSessionParticipant(outcome.participant));
 
     res.status(201).json({

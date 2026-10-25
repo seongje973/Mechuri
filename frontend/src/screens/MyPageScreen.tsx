@@ -1,39 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  SafeAreaView, 
-  TouchableOpacity, 
-  ScrollView, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  SafeAreaView,
+  TouchableOpacity,
+  ScrollView,
   Alert,
   Platform,
   ActivityIndicator,
   TextInput,
-  KeyboardAvoidingView,
-  Linking
+  KeyboardAvoidingView
 } from 'react-native';
-import { apiFetch, getAuthToken, saveSession, saveProfile } from '../api/client';
-import { prepareKakaoLoginState } from '../api/kakaoLogin';
+import { apiFetch, saveSession } from '../api/client';
+import { devKakaoLogin, openKakaoLogin } from '../api/kakaoLogin';
 import { AVOID_TAG_OPTIONS } from '../constants/menuData';
-import { KAKAO_CLIENT_ID, KAKAO_REDIRECT_URI } from '../constants/env';
+import {
+  UserStats,
+  clearHistories,
+  deleteAccount,
+  getAvoidTags,
+  getFavorites,
+  getHistories,
+  getStats,
+  setAvoidTags
+} from '../storage/userData';
+import { requestLoginPrompt } from '../storage/loginPrompt';
+import { colors, radii } from '../theme/colors';
 
 interface MyPageScreenProps {
+  navigation: any;
   isLoggedIn: boolean;
   userProfile: any;
   onLoginSuccess: () => void;
   onLogout: () => void;
 }
 
-export default function MyPageScreen({ 
-  isLoggedIn, 
-  userProfile, 
-  onLoginSuccess, 
-  onLogout 
+/**
+ * 게스트와 로그인 사용자가 같은 화면을 쓴다. 기록은 storage/userData가 기기 또는 서버에서 읽는다.
+ * 게스트에게는 위쪽에 "카카오로 저장하기" 카드를 보여 주고, 들어올 때 바텀시트로 한 번 권한다 (7일에 한 번).
+ */
+export default function MyPageScreen({
+  navigation,
+  isLoggedIn,
+  userProfile,
+  onLoginSuccess,
+  onLogout
 }: MyPageScreenProps) {
-  
+  const isGuest = !isLoggedIn || !userProfile;
+
   // Profile & Statistics state
-  const [stats, setStats] = useState({ eatenCount: 0, favoritesCount: 0, avoidCount: 0 });
+  const [stats, setStats] = useState<UserStats>({ eatenCount: 0, favoritesCount: 0, avoidCount: 0 });
+  const [activeTags, setActiveTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Email Authentication Form state
@@ -44,50 +62,37 @@ export default function MyPageScreen({
   const [nickname, setNickname] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  useEffect(() => {
-    if (isLoggedIn) {
-      loadUserData();
-    }
-  }, [isLoggedIn]);
-
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
     setLoading(true);
     try {
-      if (!(await getAuthToken())) return;
-
-      // Fetch live stats
-      const statsRes = await apiFetch(`/api/user/stats`);
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(statsData);
-      }
+      const [nextStats, tags] = await Promise.all([getStats(), getAvoidTags()]);
+      setStats(nextStats);
+      setActiveTags(tags);
     } catch (error) {
-      console.log('❌ Error loading MyPage stats from backend:', error);
+      console.log('❌ Error loading MyPage stats:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // 탭에 들어올 때마다 새로 읽는다 (다른 화면에서 기록·최애가 늘었을 수 있음)
+  useEffect(() => {
+    loadUserData();
+    const unsubscribe = navigation?.addListener?.('focus', () => {
+      loadUserData();
+      if (isGuest) requestLoginPrompt('mypage');
+    });
+    return unsubscribe;
+    // userProfile이 바뀌면(예: 앱 시작 때 남은 게스트 기록을 다시 옮긴 뒤) 새로 읽는다
+  }, [navigation, isGuest, userProfile, loadUserData]);
 
   // Real OAuth Kakao Login
   const handleRealKakaoLogin = async () => {
     setAuthLoading(true);
     try {
-      if (!KAKAO_CLIENT_ID) {
-        Alert.alert("환경 설정 필요", "EXPO_PUBLIC_KAKAO_CLIENT_ID가 설정되지 않았습니다.");
-        return;
-      }
-      const client_id = KAKAO_CLIENT_ID;
-      const redirect_uri = encodeURIComponent(KAKAO_REDIRECT_URI);
-      
-      // state = Expo 개발 서버 주소 + 이 앱에 로그인을 묶는 challenge. 서버가 로그인 후 앱을 다시 연다 (실기기 포함)
-      const stateParam = encodeURIComponent(await prepareKakaoLoginState());
-      
-      const authUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&state=${stateParam}`;
-      
-      console.log("🌐 Opening Kakao OAuth Login URL in browser:", authUrl);
-      await Linking.openURL(authUrl);
+      await openKakaoLogin();
     } catch (e) {
-      Alert.alert("연결 실패 🔌", "카카오 실시간 브라우저 로그인 창을 열 수 없습니다.");
+      Alert.alert("연결 실패 🔌", "카카오 로그인 창을 열 수 없습니다. EXPO_PUBLIC_KAKAO_CLIENT_ID 설정을 확인해 주세요.");
     } finally {
       setAuthLoading(false);
     }
@@ -96,41 +101,15 @@ export default function MyPageScreen({
   // Simulated Kakao Sync (For fast, reliable local development testing)
   const handleSimulatedKakaoSync = async () => {
     setAuthLoading(true);
-    const randomId = Math.floor(Math.random() * 100000);
-    const mockProfile = {
-      id: randomId,
-      email: `kakao_${randomId}@kakaomail.com`,
-      nickname: `카카오 미식가 💛`
-    };
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
     try {
-      const url = `/api/auth/kakao/mobile`;
-
-      console.log("📡 Synching simulated Kakao profile to backend...");
-      const response = await apiFetch(url, {
-        method: 'POST',
-        body: mockProfile,
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      const data = await response.json();
-
-      if (response.ok) {
-        await saveSession(data.token, data.user);
-        console.log("✅ Kakao simulated auth sync succeeded!");
-        onLoginSuccess();
-      } else {
-        throw new Error(data.error);
-      }
+      const { token, user } = await devKakaoLogin();
+      await saveSession(token, user);
+      console.log("✅ Kakao simulated auth sync succeeded!");
+      onLoginSuccess();
     } catch (error) {
       // 서버가 받아주지 않는 가짜 토큰을 저장하면 이후 모든 요청이 401이 되므로, 실패하면 비로그인 상태로 둔다.
       console.log("⚠️ Simulated Kakao sync failed:", error);
-      clearTimeout(timeoutId);
-      Alert.alert("연결 실패 📡", "서버에 연결하지 못했습니다. 로그인 없이도 추천은 그대로 쓸 수 있어요.");
+      Alert.alert("연결 실패 📡", "서버에 연결하지 못했습니다. 로그인 없이도 기록은 이 폰에 저장돼요.");
     } finally {
       setAuthLoading(false);
     }
@@ -149,26 +128,18 @@ export default function MyPageScreen({
     }
 
     setAuthLoading(true);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
     try {
       const endpoint = isLoginMode ? 'login' : 'register';
-      const url = `/api/auth/${endpoint}`;
-
-      console.log(`📡 Sending auth request to: ${url}`);
-
-      const bodyData = isLoginMode 
+      const bodyData = isLoginMode
         ? { email, password }
         : { email, password, nickname };
 
-      const response = await apiFetch(url, {
+      const response = await apiFetch(`/api/auth/${endpoint}`, {
         method: 'POST',
         body: bodyData,
-        signal: controller.signal
+        auth: false,
+        timeoutMs: 3000
       });
-
-      clearTimeout(timeoutId);
       const data = await response.json();
 
       if (response.ok) {
@@ -189,143 +160,94 @@ export default function MyPageScreen({
   const handleLogout = () => {
     Alert.alert(
       "로그아웃 🚪",
-      "정말로 로그아웃하고 비로그인 모드로 돌아가시겠습니까?",
+      "로그아웃하면 이 폰에서는 새 게스트 기록으로 시작해요. 계정에 저장된 기록은 다시 로그인하면 그대로 있어요.",
       [
         { text: "취소", style: "cancel" },
-        { 
-          text: "로그아웃", 
-          style: "destructive",
-          onPress: async () => {
-            onLogout();
-          } 
-        }
+        { text: "로그아웃", style: "destructive", onPress: onLogout }
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    const confirmDelete = async () => {
+      try {
+        await deleteAccount();
+        onLogout();
+        Alert.alert("탈퇴 완료", "계정과 모든 기록을 지웠어요. 그동안 고마웠어요 🐣");
+      } catch (e) {
+        Alert.alert("에러", "탈퇴하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요.");
+      }
+    };
+
+    Alert.alert(
+      "회원 탈퇴",
+      "계정과 식사 기록, 최애 메뉴, 기피 설정이 모두 지워지고 되돌릴 수 없어요. 정말 탈퇴할까요?",
+      [
+        { text: "취소", style: "cancel" },
+        { text: "탈퇴하기", style: "destructive", onPress: confirmDelete }
       ]
     );
   };
 
   const handlePressFavorite = async () => {
     try {
-      const res = await apiFetch(`/api/user/favorites`);
-      
-      if (!res.ok) throw new Error("Fetch failed");
-      const data = await res.json();
-      const favList = data.favorites || [];
-
-      const listStr = favList.length > 0 
-        ? favList.map((f: any) => `${f.emoji || '🍽️'} ${f.menuName}`).join('\n')
+      const favList = await getFavorites();
+      const listStr = favList.length > 0
+        ? favList.map(f => `${f.emoji || '🍽️'} ${f.menuName}`).join('\n')
         : "아직 즐겨찾기한 음식이 없습니다.";
 
-      Alert.alert(
-        "❤️ 나의 최애 음식 목록",
-        `추천 퀴즈 결과에서 즐겨찾기 하트를 누른 목록입니다.\n\n${listStr}`,
-        [
-          { text: "확인" },
-          {
-            text: "랜덤 샘플 추가",
-            onPress: async () => {
-              const sampleFoods = [
-                { menuName: "삼겹살", emoji: "🥩", category: "한식" },
-                { menuName: "초밥", emoji: "🍣", category: "일식" },
-                { menuName: "크림파스타", emoji: "🍝", category: "양식" }
-              ];
-              const randomFood = sampleFoods[Math.floor(Math.random() * sampleFoods.length)];
-              
-              await apiFetch(`/api/user/favorites`, {
-                method: 'POST',
-                body: randomFood
-              });
-              loadUserData();
-            }
-          }
-        ]
-      );
+      Alert.alert("❤️ 나의 최애 음식 목록", `추천 결과와 월드컵에서 하트를 누른 메뉴예요.\n\n${listStr}`);
     } catch (e) {
       Alert.alert("에러", "즐겨찾기 목록을 불러오지 못했습니다.");
     }
   };
 
-  const handlePressAvoid = async () => {
-    if (!userProfile) return;
-    
-    const activeTags = userProfile.avoidTags ? userProfile.avoidTags.split(',').filter(Boolean) : [];
-    const availableTags: string[] = AVOID_TAG_OPTIONS;
-
+  const handlePressAvoid = () => {
     const toggleTag = async (tag: string) => {
-      let newTags = [...activeTags];
-      if (newTags.includes(tag)) {
-        newTags = newTags.filter(t => t !== tag);
-      } else {
-        newTags.push(tag);
-      }
-      
-      const updatedString = newTags.join(',');
+      const newTags = activeTags.includes(tag)
+        ? activeTags.filter(t => t !== tag)
+        : [...activeTags, tag];
       try {
-        const res = await apiFetch(`/api/user/avoid-tags`, {
-          method: 'PUT',
-          body: { avoidTags: updatedString }
-        });
-        
-        if (res.ok) {
-          // Update cached profile
-          const updatedProfile = { ...userProfile, avoidTags: updatedString };
-          await saveProfile(updatedProfile);
-          // We can refresh user statistics in state
-          loadUserData();
-          onLoginSuccess();
-          Alert.alert("필터 수정 완료 🐣", `기피 태그가 저장되었습니다: [${newTags.join(', ') || '없음'}]`);
-        }
+        const saved = await setAvoidTags(newTags);
+        setActiveTags(saved);
+        loadUserData();
+        Alert.alert("필터 수정 완료 🐣", `기피 태그가 저장되었습니다: [${saved.join(', ') || '없음'}]`);
       } catch (e) {
         Alert.alert("에러", "기피 설정을 변경하지 못했습니다.");
       }
     };
 
-    const buttons = availableTags.map(tag => ({
+    const buttons = AVOID_TAG_OPTIONS.map(tag => ({
       text: `${activeTags.includes(tag) ? '✅' : '⬜'} ${tag}`,
       onPress: () => toggleTag(tag)
     }));
+    const message = `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 빠져요.\n\n현재 기피 성분: [${activeTags.join(', ') || '없음'}]`;
 
     const showPage3 = () => {
-      Alert.alert(
-        "🚫 알레르기 및 기피 설정 (3/3)",
-        `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
-        [
-          ...buttons.slice(4, 6),
-          { text: "닫기", style: "cancel" }
-        ]
-      );
+      Alert.alert("🚫 알레르기 및 기피 설정 (3/3)", message, [
+        ...buttons.slice(4, 6),
+        { text: "닫기", style: "cancel" }
+      ]);
     };
 
     const showPage2 = () => {
-      Alert.alert(
-        "🚫 알레르기 및 기피 설정 (2/3)",
-        `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
-        [
-          ...buttons.slice(2, 4),
-          { text: "다음 ➔", onPress: showPage3 }
-        ]
-      );
+      Alert.alert("🚫 알레르기 및 기피 설정 (2/3)", message, [
+        ...buttons.slice(2, 4),
+        { text: "다음 ➔", onPress: showPage3 }
+      ]);
     };
 
-    Alert.alert(
-      "🚫 알레르기 및 기피 설정 (1/3)",
-      `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 완전히 필터링됩니다!\n\n현재 활성화된 기피 성분: [${activeTags.join(', ') || '없음'}]`,
-      [
-        ...buttons.slice(0, 2),
-        { text: "다음 ➔", onPress: showPage2 }
-      ]
-    );
+    Alert.alert("🚫 알레르기 및 기피 설정 (1/3)", message, [
+      ...buttons.slice(0, 2),
+      { text: "다음 ➔", onPress: showPage2 }
+    ]);
   };
 
   const handlePressHistory = async () => {
     try {
-      const res = await apiFetch(`/api/user/histories`);
-      
-      if (!res.ok) throw new Error("Fetch failed");
-      const data = await res.json();
-      const historyList = data.histories || [];
-
-      const listStr = historyList.length > 0 
-        ? historyList.slice(0, 10).map((h: any) => {
+      const historyList = await getHistories();
+      const listStr = historyList.length > 0
+        ? historyList.slice(0, 10).map(h => {
             const dateStr = new Date(h.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
             return `[${dateStr}] ${h.emoji || '🍽️'} ${h.menuName} ${h.restaurantName ? `(${h.restaurantName})` : ''}`;
           }).join('\n')
@@ -333,18 +255,20 @@ export default function MyPageScreen({
 
       Alert.alert(
         "📅 나의 식사 히스토리",
-        `사용자님이 먹고 딥링크로 맛집을 길찾기했던 내역입니다.\n\n${listStr}`,
+        `추천받고 고른 메뉴 기록이에요.\n\n${listStr}`,
         [
           { text: "확인" },
           {
             text: "전체 삭제",
             style: "destructive",
             onPress: async () => {
-              await apiFetch(`/api/user/histories`, {
-                method: 'DELETE',
-              });
-              loadUserData();
-              Alert.alert("완료", "식사 기록이 완전히 비워졌습니다 🐣");
+              try {
+                await clearHistories();
+                loadUserData();
+                Alert.alert("완료", "식사 기록이 완전히 비워졌습니다 🐣");
+              } catch (e) {
+                Alert.alert("에러", "식사 기록을 지우지 못했습니다.");
+              }
             }
           }
         ]
@@ -354,207 +278,193 @@ export default function MyPageScreen({
     }
   };
 
-  // --- RENDERING: AUTHENTICATION ENTRANCE (NOT LOGGED IN) ---
-  if (!isLoggedIn || !userProfile) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-          style={{ flex: 1 }}
+  const renderGuestLoginCard = () => (
+    <View style={styles.authCard}>
+      <Text style={styles.authCardTitle}>기록을 카카오에 저장하기 💛</Text>
+      <Text style={styles.authCardDesc}>
+        지금 기록은 이 폰에만 있어요. 로그인하면 아래 기록이 계정으로 옮겨져서 다른 폰에서도 볼 수 있어요.
+      </Text>
+
+      <TouchableOpacity
+        style={styles.kakaoBtn}
+        onPress={handleRealKakaoLogin}
+        disabled={authLoading}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.kakaoBtnText}>💛 카카오 계정으로 로그인</Text>
+      </TouchableOpacity>
+
+      {/* 개발 빌드에서만 보임, 서버도 운영에서는 막음 */}
+      {__DEV__ && (
+        <TouchableOpacity
+          style={styles.devBypassBtn}
+          onPress={handleSimulatedKakaoSync}
+          disabled={authLoading}
         >
-          <ScrollView contentContainerStyle={styles.authContainer} keyboardShouldPersistTaps="handled">
-            
-            {/* Logo Brand Header */}
-            <View style={styles.logoSection}>
-              <Text style={styles.logoEmoji}>🐣</Text>
-              <Text style={styles.logoText}>메추리</Text>
-              <Text style={styles.logoSub}>오늘 딱 땡기는 완벽한 메뉴 추리 요정</Text>
-            </View>
+          <Text style={styles.devBypassText}>
+            브라우저 연결에 문제가 있나요? 간편 동기화로 시작하기 ➔
+          </Text>
+        </TouchableOpacity>
+      )}
 
-            {/* Login Card Panel */}
-            <View style={styles.authCard}>
-              <Text style={styles.authCardTitle}>나의 미식 분석 시작하기 📊</Text>
-              <Text style={styles.authCardDesc}>
-                카카오 로그인을 연결하면 내가 먹은 음식 분석, 최애 메뉴 보관, 알레르기 기피 설정 등 더 멋진 개인 맞춤 추천을 즐길 수 있습니다.
+      <TouchableOpacity
+        style={styles.accordionHeader}
+        onPress={() => setShowEmailForm(!showEmailForm)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.accordionTitle}>
+          {showEmailForm ? "이메일 로그인 양식 닫기 ▴" : "또는 이메일 주소로 로그인하기 ▾"}
+        </Text>
+      </TouchableOpacity>
+
+      {showEmailForm && (
+        <View style={styles.emailFormContent}>
+          <Text style={styles.formTitle}>
+            {isLoginMode ? "이메일 로그인" : "새로운 회원가입"}
+          </Text>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>이메일 주소</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="example@mechuri.com"
+              placeholderTextColor={colors.muted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>비밀번호</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={colors.muted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {!isLoginMode && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>미식가 닉네임</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="예: 배고픈메추리"
+                placeholderTextColor={colors.muted}
+                value={nickname}
+                onChangeText={setNickname}
+                autoCorrect={false}
+              />
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.emailSubmitBtn}
+            onPress={handleEmailSubmit}
+            disabled={authLoading}
+          >
+            {authLoading ? (
+              <ActivityIndicator color={colors.ink} />
+            ) : (
+              <Text style={styles.emailSubmitText}>
+                {isLoginMode ? "미식가로 입장하기" : "메추리 가입하기"}
               </Text>
+            )}
+          </TouchableOpacity>
 
-              {/* Main Gorgeous Kakao Auth Button */}
-              <TouchableOpacity 
-                style={styles.kakaoBtn}
-                onPress={handleRealKakaoLogin}
-                disabled={authLoading}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.kakaoBtnText}>💛 카카오 계정으로 로그인</Text>
-              </TouchableOpacity>
-
-              {/* Development Quick Bypass Link (개발 빌드에서만 보임, 서버도 운영에서는 막음) */}
-              {__DEV__ && (
-                <TouchableOpacity 
-                  style={styles.devBypassBtn}
-                  onPress={handleSimulatedKakaoSync}
-                  disabled={authLoading}
-                >
-                  <Text style={styles.devBypassText}>
-                    브라우저 연결에 문제가 있나요? 간편 동기화로 시작하기 ➔
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Accordion Email Auth Trigger */}
-              <TouchableOpacity 
-                style={styles.accordionHeader}
-                onPress={() => setShowEmailForm(!showEmailForm)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.accordionTitle}>
-                  {showEmailForm ? "이메일 로그인 양식 닫기 ▴" : "또는 이메일 주소로 로그인하기 ▾"}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Accordion Content */}
-              {showEmailForm && (
-                <View style={styles.emailFormContent}>
-                  <Text style={styles.formTitle}>
-                    {isLoginMode ? "이메일 로그인" : "새로운 회원가입"}
-                  </Text>
-                  
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>이메일 주소</Text>
-                    <TextInput 
-                      style={styles.input}
-                      placeholder="example@mechuri.com"
-                      placeholderTextColor="#78716c"
-                      value={email}
-                      onChangeText={setEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>비밀번호</Text>
-                    <TextInput 
-                      style={styles.input}
-                      placeholder="••••••••"
-                      placeholderTextColor="#78716c"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-
-                  {!isLoginMode && (
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>미식가 닉네임</Text>
-                      <TextInput 
-                        style={styles.input}
-                        placeholder="예: 배고픈메추리"
-                        placeholderTextColor="#78716c"
-                        value={nickname}
-                        onChangeText={setNickname}
-                        autoCorrect={false}
-                      />
-                    </View>
-                  )}
-
-                  <TouchableOpacity 
-                    style={styles.emailSubmitBtn}
-                    onPress={handleEmailSubmit}
-                    disabled={authLoading}
-                  >
-                    {authLoading ? (
-                      <ActivityIndicator color="#1c1917" />
-                    ) : (
-                      <Text style={styles.emailSubmitText}>
-                        {isLoginMode ? "미식가로 입장하기" : "메추리 가입하기"}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={styles.modeSwitchBtn}
-                    onPress={() => setIsLoginMode(!isLoginMode)}
-                  >
-                    <Text style={styles.modeSwitchText}>
-                      {isLoginMode 
-                        ? "계정이 없으신가요? 간편 가입하러 가기 ➔"
-                        : "이미 회원이신가요? 기존 아이디로 로그인 ➔"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            <Text style={styles.welcomeTipText}>
-              💡 팁: 로그인하지 않아도 메뉴 추천 퀴즈와 지도는 자유롭게 이용할 수 있습니다!
+          <TouchableOpacity
+            style={styles.modeSwitchBtn}
+            onPress={() => setIsLoginMode(!isLoginMode)}
+          >
+            <Text style={styles.modeSwitchText}>
+              {isLoginMode
+                ? "계정이 없으신가요? 간편 가입하러 가기 ➔"
+                : "이미 회원이신가요? 기존 아이디로 로그인 ➔"}
             </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
 
-  // --- RENDERING: PERSONALIZED PROFILE PANEL (LOGGED IN) ---
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
-        {/* Active Profile Header Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>😋</Text>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          {/* Profile Header Card */}
+          <View style={styles.profileCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{isGuest ? '🐣' : '😋'}</Text>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.userName}>{isGuest ? '게스트 미식가' : `${userProfile.nickname} 님`}</Text>
+              <Text style={styles.userEmail}>{isGuest ? '기록은 이 폰에 저장돼요' : userProfile.email}</Text>
+            </View>
+            {loading && <ActivityIndicator color={colors.yolkDeep} />}
           </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.userName}>{userProfile.nickname} 님</Text>
-            <Text style={styles.userEmail}>{userProfile.email}</Text>
+
+          {isGuest && renderGuestLoginCard()}
+
+          {/* Stat Badges */}
+          <View style={styles.statsRow}>
+            <TouchableOpacity style={styles.statBox} onPress={handlePressHistory}>
+              <Text style={styles.statNumber}>{stats.eatenCount}</Text>
+              <Text style={styles.statLabel}>먹은 기록 📅</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statBox} onPress={handlePressFavorite}>
+              <Text style={styles.statNumber}>{stats.favoritesCount}</Text>
+              <Text style={styles.statLabel}>선호 음식 ❤️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statBox} onPress={handlePressAvoid}>
+              <Text style={styles.statNumber}>{stats.avoidCount}</Text>
+              <Text style={styles.statLabel}>기피 필터 🚫</Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Live Stat Badges */}
-        <View style={styles.statsRow}>
-          <TouchableOpacity style={styles.statBox} onPress={handlePressHistory}>
-            <Text style={styles.statNumber}>{stats.eatenCount}</Text>
-            <Text style={styles.statLabel}>먹은 기록 📅</Text>
+          {/* Quick Menu Settings */}
+          <Text style={styles.sectionTitle}>⚙️ 개인 맞춤 설정</Text>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handlePressFavorite}>
+            <Text style={styles.menuText}>❤️ 나의 최애 음식 모아보기</Text>
+            <Text style={styles.arrow}>➔</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.statBox} onPress={handlePressFavorite}>
-            <Text style={styles.statNumber}>{stats.favoritesCount}</Text>
-            <Text style={styles.statLabel}>선호 음식 ❤️</Text>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handlePressAvoid}>
+            <Text style={styles.menuText}>🚫 알레르기 유발 및 오이/가지 기피 차단</Text>
+            <Text style={styles.arrow}>➔</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.statBox} onPress={handlePressAvoid}>
-            <Text style={styles.statNumber}>{stats.avoidCount}</Text>
-            <Text style={styles.statLabel}>기피 필터 🚫</Text>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handlePressHistory}>
+            <Text style={styles.menuText}>📅 내가 먹고 추천받았던 식단 히스토리</Text>
+            <Text style={styles.arrow}>➔</Text>
           </TouchableOpacity>
-        </View>
 
-        {/* Quick Menu Settings */}
-        <Text style={styles.sectionTitle}>⚙️ 개인 맞춤 설정</Text>
-        
-        <TouchableOpacity style={styles.menuItem} onPress={handlePressFavorite}>
-          <Text style={styles.menuText}>❤️ 나의 최애 음식 조건 모아보기</Text>
-          <Text style={styles.arrow}>➔</Text>
-        </TouchableOpacity>
+          {!isGuest && (
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Text style={styles.logoutBtnText}>🚪 로그아웃</Text>
+            </TouchableOpacity>
+          )}
 
-        <TouchableOpacity style={styles.menuItem} onPress={handlePressAvoid}>
-          <Text style={styles.menuText}>🚫 알레르기 유발 및 오이/가지 기피 차단</Text>
-          <Text style={styles.arrow}>➔</Text>
-        </TouchableOpacity>
+          {!isGuest && (
+            <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+              <Text style={styles.deleteAccountText}>회원 탈퇴</Text>
+            </TouchableOpacity>
+          )}
 
-        <TouchableOpacity style={styles.menuItem} onPress={handlePressHistory}>
-          <Text style={styles.menuText}>📅 내가 먹고 추천받았던 식단 히스토리</Text>
-          <Text style={styles.arrow}>➔</Text>
-        </TouchableOpacity>
-
-        {/* Active Logout Trigger */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutBtnText}>🚪 미식가 로그아웃</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.versionText}>버전 정보 v1.1.0 (Kakao Live Sync - Onyx & Gold)</Text>
-      </ScrollView>
+          <Text style={styles.versionText}>버전 정보 v1.2.0</Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -562,273 +472,235 @@ export default function MyPageScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#1c1917', // Warm Onyx Black
+    backgroundColor: colors.cream,
   },
   container: {
     padding: 24,
-  },
-  authContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-    paddingTop: 50,
-  },
-  logoSection: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  logoEmoji: {
-    fontSize: 64,
-    marginBottom: 8,
-  },
-  logoText: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#fbbf24', // Luxury Gold
-    letterSpacing: 1.5,
-  },
-  logoSub: {
-    fontSize: 12,
-    color: '#a8a29e',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  authCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.65)',
-    borderRadius: 24,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.15)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 8,
-    marginBottom: 20,
-  },
-  authCardTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  authCardDesc: {
-    fontSize: 12.5,
-    color: '#a8a29e',
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 22,
-  },
-  kakaoBtn: {
-    backgroundColor: '#FEE500', // Standard Kakao Yellow
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    shadowColor: '#FEE500',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  kakaoBtnText: {
-    color: '#191919',
-    fontSize: 14.5,
-    fontWeight: '800',
-  },
-  devBypassBtn: {
-    alignSelf: 'center',
-    marginTop: 14,
-    paddingVertical: 6,
-  },
-  devBypassText: {
-    color: '#fbbf24',
-    fontSize: 11.5,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-    textAlign: 'center',
-  },
-  accordionHeader: {
-    alignSelf: 'center',
-    marginTop: 20,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    width: '100%',
-    alignItems: 'center',
-  },
-  accordionTitle: {
-    color: '#a8a29e',
-    fontSize: 12.5,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  emailFormContent: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  formTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginBottom: 14,
-    textAlign: 'center',
-  },
-  inputContainer: {
-    marginBottom: 14,
-  },
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fbbf24',
-    marginBottom: 5,
-    letterSpacing: 0.5,
-  },
-  input: {
-    backgroundColor: 'rgba(28, 25, 23, 0.7)',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    color: '#f8fafc',
-    fontSize: 13.5,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  emailSubmitBtn: {
-    backgroundColor: '#fbbf24',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  emailSubmitText: {
-    color: '#1c1917',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  modeSwitchBtn: {
-    alignSelf: 'center',
-    marginTop: 12,
-    paddingVertical: 4,
-  },
-  modeSwitchText: {
-    color: '#a8a29e',
-    fontSize: 11.5,
-    fontWeight: '600',
-  },
-  welcomeTipText: {
-    textAlign: 'center',
-    color: '#57534e',
-    fontSize: 11,
-    lineHeight: 16,
-    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 40 : 24,
   },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(41, 37, 36, 0.6)',
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.15)',
+    borderColor: colors.line,
+    padding: 18,
+    marginBottom: 16,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#fbbf24',
+    width: 56,
+    height: 56,
+    borderRadius: radii.full,
+    backgroundColor: colors.shell,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 28,
   },
   profileInfo: {
-    marginLeft: 16,
+    flex: 1,
   },
   userName: {
-    color: '#f8fafc',
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '800',
-    marginBottom: 4,
+    color: colors.ink,
   },
   userEmail: {
-    color: '#a8a29e',
-    fontSize: 12,
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 3,
+  },
+  authCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.line,
+    marginBottom: 16,
+  },
+  authCardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.ink,
+    marginBottom: 8,
+  },
+  authCardDesc: {
+    fontSize: 13.5,
+    color: colors.muted,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  kakaoBtn: {
+    backgroundColor: colors.kakao,
+    borderRadius: radii.md,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.yolkDeep,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  kakaoBtnText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  devBypassBtn: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  devBypassText: {
+    color: colors.feather,
+    fontSize: 12.5,
+    textDecorationLine: 'underline',
+  },
+  accordionHeader: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    alignItems: 'center',
+  },
+  accordionTitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emailFormContent: {
+    marginTop: 14,
+  },
+  formTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.ink,
+    marginBottom: 12,
+  },
+  inputContainer: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 12.5,
+    color: colors.muted,
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  input: {
+    backgroundColor: colors.cream,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 13 : 10,
+    color: colors.ink,
+    fontSize: 14.5,
+  },
+  emailSubmitBtn: {
+    backgroundColor: colors.yolk,
+    borderRadius: radii.md,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.yolkDeep,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  emailSubmitText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modeSwitchBtn: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  modeSwitchText: {
+    color: colors.feather,
+    fontSize: 12.5,
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(41, 37, 36, 0.3)',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.08)',
+    marginBottom: 24,
   },
   statBox: {
     flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderBottomWidth: 4,
+    paddingVertical: 16,
     alignItems: 'center',
-    paddingVertical: 8,
+    marginHorizontal: 4,
   },
   statNumber: {
-    color: '#fbbf24',
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 4,
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.yolkDeep,
   },
   statLabel: {
-    color: '#a8a29e',
     fontSize: 12,
+    color: colors.muted,
+    marginTop: 4,
     fontWeight: '600',
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
-    color: '#f8fafc',
-    marginBottom: 16,
+    color: colors.ink,
+    marginBottom: 12,
   },
   menuItem: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(41, 37, 36, 0.4)',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 12,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.08)',
+    borderColor: colors.line,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginBottom: 10,
   },
   menuText: {
-    color: '#e2e8f0',
     fontSize: 14.5,
+    color: colors.ink,
     fontWeight: '600',
+    flex: 1,
   },
   arrow: {
-    color: '#78716c',
     fontSize: 14,
+    color: colors.quail,
+    marginLeft: 8,
   },
   logoutBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
+    marginTop: 18,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.15)',
-    marginTop: 20,
+    borderColor: colors.chili,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
   logoutBtnText: {
-    color: '#ef4444',
-    fontSize: 14,
+    color: colors.chili,
+    fontSize: 14.5,
     fontWeight: '700',
+  },
+  deleteAccountBtn: {
+    marginTop: 14,
+    alignSelf: 'center',
+    padding: 6,
+  },
+  deleteAccountText: {
+    color: colors.muted,
+    fontSize: 12.5,
+    textDecorationLine: 'underline',
   },
   versionText: {
     textAlign: 'center',
-    color: '#44403c',
-    fontSize: 11,
-    marginTop: 32,
-  }
+    color: colors.muted,
+    fontSize: 11.5,
+    marginTop: 24,
+    marginBottom: 12,
+  },
 });
