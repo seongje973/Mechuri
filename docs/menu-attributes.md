@@ -147,22 +147,10 @@
 - 2026-10-25 · 분식은 나라보다 "분식집 메뉴인가"를 우선
 - 2026-10-25 · 매운맛 태그는 맵기 2 이상에서 자동 계산
 
-## v2 타입 초안 (S1에서 확정)
+## v2 타입 (S1에서 확정)
 
-```ts
-export interface MenuItemV2 {
-  name: string;
-  emoji: string;
-  desc: string;
-  cuisine: 'korean' | 'chinese' | 'japanese' | 'western' | 'bunsik' | 'asian';
-  base: 'rice' | 'noodle' | 'bread' | 'meat' | 'etc';
-  soup: boolean;
-  spicy: 0 | 1 | 2 | 3;
-  temperature: 'hot' | 'cold';
-  weight: 'light' | 'normal' | 'heavy';
-  price: 'low' | 'mid' | 'high';
-  serving: 'dine_in' | 'delivery' | 'both';
-  party: 'solo' | 'group';
-  avoidTags: Array<'밀가루' | '해산물' | '날것' | '오이' | '가지'>; // 매운맛은 spicy >= 2 로 계산
-}
-```
+실제 타입과 데이터는 `frontend/src/constants/menuData.ts`에 있습니다. 초안과 달라진 점:
+
+- 나라별은 `cuisine` 키 대신 `category`에 한국어 라벨(`'한식'`, `'분식'` 등)을 그대로 씁니다. 화면 표시와 서버 기록(`category`)에 이미 쓰던 값이라 바꾸지 않았습니다.
+- `avoidTags`에는 매운맛을 넣지 않습니다. `getAvoidTags(item)`이 맵기 2 이상이면 매운맛을 붙여 줍니다.
+- 값 검사는 `npm test`의 `menuData.test.ts`가 합니다 (S4에서 `npm run check:menu`로 분리 예정).

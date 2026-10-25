@@ -1,5 +1,5 @@
-import { MENU_DATA, MenuItem } from '../../constants/menuData';
-import { AKINATOR_PROPERTIES } from '../../constants/akinatorQuestions';
+import { MENU_DATA, MenuItem, getAvoidTags } from '../../constants/menuData';
+import { QUESTIONS } from '../../constants/akinatorQuestions';
 import {
   applyAnswer,
   buildInitialPool,
@@ -10,14 +10,14 @@ import {
 } from '../filterEngine';
 
 const byName = (name: string) => MENU_DATA.find(m => m.name === name) as MenuItem;
-const question = (id: string) => AKINATOR_PROPERTIES.find(q => q.id === id)!;
+const question = (id: string) => QUESTIONS.find(q => q.id === id)!;
 
 describe('buildInitialPool', () => {
   it('제외한 분류와 기피 태그가 걸린 메뉴를 뺀다', () => {
     const pool = buildInitialPool(MENU_DATA, ['양식'], parseAvoidTags('매운맛,해산물'));
     expect(pool.length).toBeGreaterThan(0);
     expect(pool.some(m => m.category === '양식')).toBe(false);
-    expect(pool.some(m => m.tags.includes('매운맛') || m.tags.includes('해산물'))).toBe(false);
+    expect(pool.some(m => getAvoidTags(m).includes('매운맛') || getAvoidTags(m).includes('해산물'))).toBe(false);
   });
 
   it('기피 태그로 후보가 전부 사라지면 기피 태그를 무시한다', () => {
@@ -29,10 +29,10 @@ describe('buildInitialPool', () => {
 describe('pickNextQuestion', () => {
   it('예/아니오가 가장 반반에 가까운 질문을 고르고, 더 없으면 null', () => {
     const pool = [byName('짜장면'), byName('짬뽕'), byName('김치찌개'), byName('삼겹살')];
-    // 면 2 : 나머지 2 로 정확히 반반인 첫 질문
-    expect(pickNextQuestion(pool, AKINATOR_PROPERTIES, [])?.id).toBe('isNoodle');
-    expect(pickNextQuestion(pool, AKINATOR_PROPERTIES, AKINATOR_PROPERTIES.map(q => q.id))).toBeNull();
-    expect(pickNextQuestion([byName('짜장면')], AKINATOR_PROPERTIES, [])).toBeNull();
+    // 질문 순서상 처음으로 2 : 2 로 정확히 나누는 질문 (한식 2개 : 중식 2개)
+    expect(pickNextQuestion(pool, QUESTIONS, [])?.id).toBe('cuisine-korean');
+    expect(pickNextQuestion(pool, QUESTIONS, QUESTIONS.map(q => q.id))).toBeNull();
+    expect(pickNextQuestion([byName('짜장면')], QUESTIONS, [])).toBeNull();
   });
 });
 
@@ -40,14 +40,14 @@ describe('applyAnswer', () => {
   const pool = [byName('짜장면'), byName('김치찌개'), byName('삼겹살')];
 
   it('예는 맞는 메뉴만, 아니오는 안 맞는 메뉴만, 모르겠음은 그대로 남긴다', () => {
-    expect(applyAnswer(pool, question('isNoodle'), 'yes').map(m => m.name)).toEqual(['짜장면']);
-    expect(applyAnswer(pool, question('isNoodle'), 'no').map(m => m.name)).toEqual(['김치찌개', '삼겹살']);
-    expect(applyAnswer(pool, question('isNoodle'), 'dontknow')).toHaveLength(3);
+    expect(applyAnswer(pool, question('base-noodle'), 'yes').map(m => m.name)).toEqual(['짜장면']);
+    expect(applyAnswer(pool, question('base-noodle'), 'no').map(m => m.name)).toEqual(['김치찌개', '삼겹살']);
+    expect(applyAnswer(pool, question('base-noodle'), 'dontknow')).toHaveLength(3);
   });
 
   it('모순된 답으로 후보가 0개가 되면 이전 후보로 되돌린다', () => {
-    const noodles = applyAnswer(pool, question('isNoodle'), 'yes');
-    expect(applyAnswer(noodles, question('isNoodle'), 'no').map(m => m.name)).toEqual(['짜장면']);
+    const noodles = applyAnswer(pool, question('base-noodle'), 'yes');
+    expect(applyAnswer(noodles, question('base-noodle'), 'no').map(m => m.name)).toEqual(['짜장면']);
   });
 });
 
@@ -65,7 +65,7 @@ describe('전체 흐름', () => {
     const asked: string[] = [];
     let count = 0;
     for (;;) {
-      const q = pickNextQuestion(pool, AKINATOR_PROPERTIES, asked);
+      const q = pickNextQuestion(pool, QUESTIONS, asked);
       if (!q) break;
       count += 1;
       pool = applyAnswer(pool, q, 'yes');
@@ -73,6 +73,6 @@ describe('전체 흐름', () => {
       if (shouldStop(pool, count)) break;
     }
     expect(pool.length).toBeGreaterThan(0);
-    expect(count).toBeLessThanOrEqual(AKINATOR_PROPERTIES.length);
+    expect(count).toBeLessThanOrEqual(QUESTIONS.length);
   });
 });

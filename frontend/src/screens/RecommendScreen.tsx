@@ -14,11 +14,13 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { apiFetch, getStoredProfile } from '../api/client';
-import { MenuItem, MENU_DATA } from '../constants/menuData';
+import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 
 const { width } = Dimensions.get('window');
 
-import { MenuProperty, AKINATOR_PROPERTIES } from '../constants/akinatorQuestions';
+const CUISINE_EMOJI: Record<Cuisine, string> = { 한식: '🇰🇷', 중식: '🇨🇳', 일식: '🇯🇵', 양식: '🍕', 분식: '🍢', 아시안: '🍜' };
+
+import { Question, QUESTIONS } from '../constants/akinatorQuestions';
 import {
   Answer,
   MAX_QUESTIONS,
@@ -64,7 +66,7 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
   // 아키네이터 연동 핵심 상태값들
   const [pool, setPool] = useState<MenuItem[]>(MENU_DATA);
   const [askedQuestionIds, setAskedQuestionIds] = useState<string[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState<MenuProperty | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [questionCount, setQuestionCount] = useState<number>(0);
 
   const [matchingResults, setMatchingResults] = useState<MenuItem[]>([]);
@@ -164,7 +166,7 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
 
   // 예/아니오가 가장 반반으로 나뉘는 다음 질문 선정
   const determineNextQuestion = (currentPool: MenuItem[], askedIds: string[]) => {
-    const nextQuestion = pickNextQuestion(currentPool, AKINATOR_PROPERTIES, askedIds);
+    const nextQuestion = pickNextQuestion(currentPool, QUESTIONS, askedIds);
     if (nextQuestion) {
       setCurrentQuestion(nextQuestion);
       setQuestionCount(prev => prev + 1);
@@ -332,7 +334,7 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
 
           {/* 장르 선택 영역 */}
           <View style={styles.genreList}>
-            {['한식', '중식', '일식', '양식'].map((genre, idx) => {
+            {CUISINES.map((genre, idx) => {
               const isExcluded = excludedCategories.includes(genre);
               return (
                 <TouchableOpacity
@@ -345,7 +347,7 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
                   activeOpacity={0.8}
                 >
                   <Text style={styles.genreEmoji}>
-                    {genre === '한식' ? '🇰🇷' : genre === '중식' ? '🇨🇳' : genre === '일식' ? '🇯🇵' : '🍕'}
+                    {CUISINE_EMOJI[genre]}
                   </Text>
                   <Text style={[
                     styles.genreLabel,
@@ -578,8 +580,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
+    padding: 12,
+    marginBottom: 12,
     alignItems: 'center',
   },
   genreButtonExcluded: {
