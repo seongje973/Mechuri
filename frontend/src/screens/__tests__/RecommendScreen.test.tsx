@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import RecommendScreen from '../RecommendScreen';
 
 jest.mock('expo-location', () => ({
@@ -122,6 +123,27 @@ describe('RecommendScreen', () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
     expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+  });
+
+  it('로그인 상태에서 기록 저장이 실패하면 먹을래요가 다시 눌리는 상태로 남는다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    render(<RecommendScreen navigation={{ navigate: jest.fn() }} isLoggedIn userProfile={null} />);
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    apiFetch.mockImplementationOnce(async () => ({ ok: false, status: 500, json: async () => ({}) }));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+    expect(alert).toHaveBeenCalled();
+    alert.mockRestore();
   });
 });
 

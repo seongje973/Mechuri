@@ -281,7 +281,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     onSelectMenu(picked.item);
   };
 
+  // 메뉴를 빨리 바꾸면 이전 메뉴의 식당 응답이 늦게 올 수 있다. 가장 최근 요청의 결과만 쓴다
+  const restaurantRequestRef = useRef(0);
+
   const onSelectMenu = async (menu: MenuItem) => {
+    const requestId = ++restaurantRequestRef.current;
+    const isLatest = () => requestId === restaurantRequestRef.current;
     setSelectedMenu(menu);
     setLoadingRestaurants(true);
     setRestaurantsList([]);
@@ -294,14 +299,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       const response = await apiFetch(url);
       if (response.ok) {
         const data = await response.json();
-        setRestaurantsList(data.restaurants || []);
-      } else {
+        if (isLatest()) setRestaurantsList(data.restaurants || []);
+      } else if (isLatest()) {
         setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
       }
     } catch (error) {
-      setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
+      if (isLatest()) setRestaurantsList(getOfflineFallbackRestaurants(menu.name));
     } finally {
-      setLoadingRestaurants(false);
+      if (isLatest()) setLoadingRestaurants(false);
     }
   };
 
@@ -343,17 +348,20 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다. 게스트 기록은 기기 저장소 연결(US-16) 뒤 같은 자리에서 저장
   const handleEatThis = async (menu: MenuItem) => {
-    setEatenMenu(menu.name);
     if (isLoggedIn) {
       try {
-        await apiFetch(`/api/user/histories`, {
+        const res = await apiFetch(`/api/user/histories`, {
           method: 'POST',
           body: { menuName: menu.name, emoji: menu.emoji, category: menu.category }
         });
+        if (!res.ok) throw new Error(`history save failed (${res.status})`);
       } catch (e) {
         console.log("Failed to save eaten history", e);
+        Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
+        return;
       }
     }
+    setEatenMenu(menu.name);
   };
 
   const handleToggleFavorite = async () => {
