@@ -13,7 +13,8 @@ import {
   KeyboardAvoidingView,
   Linking
 } from 'react-native';
-import { apiFetch, getAuthToken, saveSession, saveProfile, DEV_SERVER_HOST } from '../api/client';
+import { apiFetch, getAuthToken, saveSession, saveProfile } from '../api/client';
+import { prepareKakaoLoginState } from '../api/kakaoLogin';
 import { KAKAO_CLIENT_ID, KAKAO_REDIRECT_URI } from '../constants/env';
 
 interface MyPageScreenProps {
@@ -77,8 +78,8 @@ export default function MyPageScreen({
       const client_id = KAKAO_CLIENT_ID;
       const redirect_uri = encodeURIComponent(KAKAO_REDIRECT_URI);
       
-      // Expo 개발 서버 주소를 state로 넘기면 서버가 로그인 후 exp://<주소>로 앱을 다시 연다 (실기기 포함)
-      const stateParam = encodeURIComponent(DEV_SERVER_HOST);
+      // state = Expo 개발 서버 주소 + 이 앱에 로그인을 묶는 challenge. 서버가 로그인 후 앱을 다시 연다 (실기기 포함)
+      const stateParam = encodeURIComponent(await prepareKakaoLoginState());
       
       const authUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&state=${stateParam}`;
       

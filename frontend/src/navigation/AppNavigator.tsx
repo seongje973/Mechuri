@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Platform, View, ActivityIndicator, Linking } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { apiFetch, clearSession, getAuthToken, getStoredProfile, saveSession } from '../api/client';
+import { exchangeKakaoLoginCode } from '../api/kakaoLogin';
 
 // Import Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -77,17 +78,10 @@ export default function AppNavigator() {
               }
             }
             
-            // 서버는 토큰 대신 60초짜리 1회용 코드를 넘긴다. 토큰은 코드로 POST해서 받는다.
+            // 서버는 토큰 대신 60초짜리 1회용 코드를 넘긴다. 토큰은 이 앱의 verifier와 함께 코드로 받는다.
             const loginCode = params['code'];
             if (loginCode) {
-              const res = await apiFetch('/api/auth/kakao/exchange', {
-                method: 'POST',
-                body: { code: loginCode },
-                auth: false,
-                timeoutMs: 8000
-              });
-              if (!res.ok) throw new Error(`Login code exchange failed (${res.status})`);
-              const { token, user } = await res.json();
+              const { token, user } = await exchangeKakaoLoginCode(loginCode);
               await saveSession(token, user);
 
               console.log("✅ Deep Link Auth Successful! Nickname:", user.nickname);
