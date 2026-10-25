@@ -41,7 +41,12 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
 
   // 투표가 필요하면 누구든 먼저 연다 (서버는 처음 온 요청만 받고 나머지에는 같은 투표를 돌려준다)
   useEffect(() => {
-    if (!group.needsVote || vote || askedForVote.current) return;
+    // 서버가 다시 떠서 투표가 사라졌으면 다시 열 수 있게
+    if (vote) {
+      askedForVote.current = false;
+      return;
+    }
+    if (!group.needsVote || askedForVote.current) return;
     askedForVote.current = true;
     onOpenVote(group.voteCandidates).then(ack => {
       if (!ack.ok) setVoteError(ack.message ?? '투표를 열지 못했어요.');

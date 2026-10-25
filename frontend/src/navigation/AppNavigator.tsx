@@ -120,15 +120,15 @@ export default function AppNavigator() {
     };
   }, []);
 
-  // 앱이 막 켜져서 탭이 아직 없으면 준비될 때까지 잠깐 기다렸다가 옮긴다
+  // 앱이 막 켜져서 탭이 아직 없으면 준비될 때까지 기다렸다가 옮긴다. 옮긴 뒤에는 지워서 다시 끌려가지 않게
   useEffect(() => {
     if (!invite || isLoggedIn === null) return;
-    let tries = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const go = () => {
       if (navigationRef.isReady()) {
         navigationRef.navigate('같이', { inviteCode: invite.code, invitedAt: invite.at });
-      } else if (tries++ < 20) {
+        setInvite(null);
+      } else {
         timer = setTimeout(go, 100);
       }
     };

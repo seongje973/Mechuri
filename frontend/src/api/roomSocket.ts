@@ -59,6 +59,7 @@ export type Ack = { ok: true; [key: string]: any } | { ok: false; error: string;
 export const FATAL_ROOM_ERRORS = ['INVALID_TOKEN', 'ROOM_EXPIRED', 'NOT_IN_ROOM'];
 
 const ACK_TIMEOUT_MS = 8000;
+const JOIN_RETRY_MS = 2000;
 
 export const applyRoomEvent = (state: RoomState | null, event: string, payload: any): RoomState | null => {
   if (event === 'room:state') return payload;
@@ -117,15 +118,24 @@ export const useRoomConnection = (token: string | null, createSocket: (url: stri
     const socket = createSocket(API_BASE_URL);
     socketRef.current = socket;
 
+    // 연결은 살아 있는데 join 응답이 없거나 일시적인 오류면 잠시 뒤 다시 join
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const retryJoin = () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => { if (socket.connected) join(); }, JOIN_RETRY_MS);
+    };
+
     const join = () => {
       socket.timeout(ACK_TIMEOUT_MS).emit('join', { token }, (err: Error | null, ack: Ack) => {
-        if (err) return; // 다음 재접속 때 다시 join
+        if (err) return retryJoin();
         if (ack.ok) {
           setParticipantId(ack.participantId);
           setState(ack.state);
         } else if (FATAL_ROOM_ERRORS.includes(ack.error)) {
           setFatal({ error: ack.error, message: ack.message });
           socket.disconnect();
+        } else {
+          retryJoin();
         }
       });
     };
@@ -144,6 +154,7 @@ export const useRoomConnection = (token: string | null, createSocket: (url: stri
     });
 
     return () => {
+      if (retryTimer) clearTimeout(retryTimer);
       socket.removeAllListeners();
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;

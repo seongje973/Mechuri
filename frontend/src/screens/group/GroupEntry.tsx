@@ -30,7 +30,8 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
     if (!inviteCode) return;
     setCode(inviteCode);
     setInviteError(null);
-    getRoom(inviteCode).catch((e: RoomApiError) => setInviteError(e.message));
+    getRoom(inviteCode).catch((e: unknown) =>
+      setInviteError(e instanceof RoomApiError ? e.message : '방 상태를 확인할 수 없어요. 코드를 확인하고 다시 시도해 주세요.'));
   }, [inviteCode]);
 
   const toggleTag = (tag: string) =>
