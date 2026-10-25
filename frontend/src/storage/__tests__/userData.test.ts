@@ -46,6 +46,14 @@ describe('게스트 저장소', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('게스트 기록을 동시에 저장해도 둘 다 남는다', async () => {
+    await Promise.all([
+      addHistory({ menuName: '김치찌개' }),
+      addHistory({ menuName: '초밥' }),
+    ]);
+    expect((await getHistories()).map(h => h.menuName).sort()).toEqual(['김치찌개', '초밥']);
+  });
+
   it('즐겨찾기 3개째에서 한 번만 로그인 시트를 요청하고, 7일 안에 닫았으면 요청하지 않는다', async () => {
     const listener = jest.fn();
     const unsubscribe = onLoginPrompt(listener);
