@@ -251,7 +251,8 @@ describe('RecommendScreen', () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();
     addHistory.mockClear();
-    addHistory.mockImplementationOnce(() => new Promise(() => {}));
+    let finishFirst!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishFirst = r)));
     await act(async () => {
       fireEvent.press(screen.getByText('이거 먹을래요'));
     });
@@ -265,6 +266,12 @@ describe('RecommendScreen', () => {
     const saved = addHistory.mock.calls.map((c: any[]) => c[0].menuName);
     expect(saved).toHaveLength(2);
     expect(saved[1]).toBe(altName);
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
+    // 먼저 누른 메뉴의 저장이 늦게 끝나도 지금 메뉴의 완료 표시는 그대로다
+    await act(async () => {
+      finishFirst();
+    });
+    expect(screen.getByText('맛있게 드세요!')).toBeTruthy();
   });
 
   describe('날씨 보정 (L-02)', () => {
