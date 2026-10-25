@@ -171,5 +171,13 @@ describe('RecommendScreen', () => {
     expect(screen.getByText('질문 1 / 7')).toBeTruthy();
     expect(screen.queryByText('← 이전 질문')).toBeNull();
   });
+
+  it('결과 화면에서 마지막 답을 고치면 그 질문으로 돌아간다', async () => {
+    await reachReveal();
+    fireEvent.press(screen.getByText('← 마지막 답 고치기'));
+    expect(screen.queryByText(/메뉴는…/)).toBeNull();
+    expect(screen.getByText(/^질문 \d+ \/ 7$/)).toBeTruthy();
+    expect(screen.getByText('👍 예')).toBeTruthy();
+  });
 });
 

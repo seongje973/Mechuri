@@ -88,6 +88,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   // "이전 질문" 되돌리기용: 답하기 직전 상태들 (이번 판, 이번 "틀렸어요" 구간만)
   const [history, setHistory] = useState<{ session: RecommendSession; question: Question }[]>([]);
+  // 결과 계산은 기록을 불러오느라 비동기라, 그사이 되돌리기·새 판이 시작되면 늦게 온 결과를 버린다
+  const finishTokenRef = useRef(0);
 
   // 결과: [0]이 지금 보여주는 메뉴, 나머지가 대안
   const [results, setResults] = useState<RecommendResult[]>([]);
@@ -205,6 +207,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
     weatherRef.current = null;
     void loadWeather();
+    finishTokenRef.current += 1;
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
@@ -237,12 +240,18 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 잘못 누른 답을 되돌린다
+  // 잘못 누른 답을 되돌린다. 결과 화면에서도 마지막 답을 고칠 수 있다
   const handleUndo = () => {
     const prev = history[history.length - 1];
     if (!prev) return;
+    finishTokenRef.current += 1; // 계산 중인 결과가 있으면 버린다
     setHistory(history.slice(0, -1));
     setSession(prev.session);
     setCurrentQuestion(prev.question);
+    setResults([]);
+    setSelectedMenu(null);
+    setRestaurantsList([]);
+    setGameState('questioning');
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
@@ -295,6 +304,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   const finishAkinator = async (finalSession: RecommendSession) => {
+    const token = ++finishTokenRef.current;
     setCurrentQuestion(null);
     // "틀렸어요" 뒤에는 처음 계산한 보정값을 그대로 쓴다
     let adj = adjustments;
@@ -302,6 +312,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (finalSession.rejected.length === 0) {
       const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
       adj = mergeAdjustments(await loadAdjustments(), context.adjustments);
+      if (token !== finishTokenRef.current) return;
       reasons = context.reasons;
       setAdjustments(adj);
       setContextReasons(reasons);
@@ -609,6 +620,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
               <TouchableOpacity style={styles.shareButton} onPress={() => shareResult(results[0].item, results[0].reasons)}>
                 <Text style={styles.shareButtonText}>📤 친구에게 공유하기</Text>
               </TouchableOpacity>
+
+              {history.length > 0 && (
+                <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
+                  <Text style={styles.undoButtonText}>← 마지막 답 고치기</Text>
+                </TouchableOpacity>
+              )}
 
               {session && canReject(session) && (
                 <TouchableOpacity style={styles.rejectButton} onPress={handleReject}>
