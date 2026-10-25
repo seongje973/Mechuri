@@ -21,7 +21,9 @@ export default function AppNavigator() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loginPrompt, setLoginPrompt] = useState<LoginPromptReason | null>(null);
   const isLoggedInRef = useRef(isLoggedIn);
-  isLoggedInRef.current = isLoggedIn;
+  useEffect(() => {
+    isLoggedInRef.current = isLoggedIn;
+  }, [isLoggedIn]);
 
   // 게스트일 때만 "카카오로 저장하기" 시트를 연다 (언제 열지는 storage/loginPrompt가 정함)
   useEffect(() => onLoginPrompt(reason => {
