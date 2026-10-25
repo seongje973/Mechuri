@@ -189,6 +189,30 @@ describe('RecommendScreen', () => {
     expect(track.mock.calls.every((c: any[]) => c[0] === 'session-test-0001')).toBe(true);
   });
 
+  it('저장이 끝나기 전에 새 추천을 시작해도 먹을래요는 누른 판의 세션으로 기록한다', async () => {
+    const { track, newSessionId } = jest.requireMock('../../analytics/events');
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    newSessionId.mockReturnValueOnce('session-old').mockReturnValueOnce('session-new');
+    await reachReveal();
+    const top = shownTop();
+    let finishSave!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishSave = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    track.mockClear();
+    await act(async () => {
+      finishSave();
+    });
+    expect(track).toHaveBeenCalledWith('session-old', { type: 'accept', payload: { action: 'eat', menu: top } });
+  });
+
   it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();
@@ -220,6 +244,26 @@ describe('RecommendScreen', () => {
     });
     expect(screen.getByText('❤️')).toBeTruthy();
     isFavorite.mockImplementation(async () => false);
+  });
+
+  it('하트를 빠르게 연달아 눌러도 저장은 하나씩 차례로 한다', async () => {
+    const { toggleFavorite } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    toggleFavorite.mockClear();
+    let finishFirst!: (v: { favorited: boolean; count: number }) => void;
+    toggleFavorite.mockImplementationOnce(() => new Promise(r => (finishFirst = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('🤍'));
+    });
+    // 첫 저장이 끝나기 전에는 두 번째 저장을 시작하지 않는다
+    expect(toggleFavorite).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finishFirst({ favorited: true, count: 1 });
+    });
+    expect(toggleFavorite).toHaveBeenCalledTimes(2);
   });
 
   it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
@@ -273,6 +317,60 @@ describe('RecommendScreen', () => {
         grant({ status: 'granted' });
       });
       expect(weatherCalls()).toHaveLength(1);
+    });
+
+    it('기피 태그를 읽는 사이 GPS가 잡혀도 그 좌표로 날씨를 받는다', async () => {
+      const { getAvoidTags } = jest.requireMock('../../storage/userData');
+      let grant!: (v: unknown) => void;
+      let tags!: (v: string[]) => void;
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(() => new Promise(r => (grant = r)));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (tags = r)));
+      renderScreen();
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      await act(async () => {
+        grant({ status: 'granted' });
+      });
+      await act(async () => {
+        tags([]);
+      });
+      expect(weatherCalls()).toHaveLength(1);
+    });
+
+    it('결과를 계산하는 사이 새 추천을 시작하면 이전 판 결과를 띄우지 않는다', async () => {
+      const { getHistories } = jest.requireMock('../../storage/userData');
+      let histories!: (v: unknown[]) => void;
+      getHistories.mockImplementationOnce(() => new Promise(r => (histories = r)));
+      const navigation = { navigate: jest.fn() };
+      const view = render(<RecommendScreen navigation={navigation} isLoggedIn={false} userProfile={null} />);
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 3; i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('🤷 상관없음'));
+        });
+      }
+      await act(async () => {
+        fireEvent.press(screen.getByText('바로 결과 보기 ➔'));
+      });
+      // 홈의 "바로 추천"으로 새 판을 시작한다
+      await act(async () => {
+        view.rerender(
+          <RecommendScreen navigation={navigation} route={{ params: { autoStart: 1 } }} isLoggedIn={false} userProfile={null} />
+        );
+      });
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+      await act(async () => {
+        histories([]);
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 0));
+      });
+      expect(screen.queryByText('당신이 생각한 메뉴는…')).toBeNull();
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
     });
 
     it('날씨 응답이 늦어도 잠깐만 기다리고 결과를 보여 준다', async () => {
