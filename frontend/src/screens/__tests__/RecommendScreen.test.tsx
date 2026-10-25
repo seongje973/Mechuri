@@ -327,6 +327,26 @@ describe('RecommendScreen', () => {
     expect(reject[1].payload.retries).toBe(1);
   });
 
+  it('먹을래요 저장 중에 마지막 답을 고치면 새 결과에 맛있게 드세요가 뜨지 않는다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finishSave!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishSave = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('← 마지막 답 고치기'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('👍 예'));
+    });
+    await act(async () => {
+      finishSave();
+    });
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+  });
+
   it('저장 중에 먹을래요를 두 번 눌러도 기록은 한 번만 보낸다', async () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();

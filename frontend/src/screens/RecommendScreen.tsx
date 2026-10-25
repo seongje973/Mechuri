@@ -270,6 +270,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const prev = history[history.length - 1];
     if (!prev) return;
     finishTokenRef.current += 1; // 계산 중인 결과가 있으면 버린다
+    eatRoundRef.current += 1; // 이전 결과에서 저장 중이던 "먹을래요"가 새 결과에 표시되지 않게 한다
     setHistory(history.slice(0, -1));
     setSession(prev.session);
     setCurrentQuestion(prev.question);
