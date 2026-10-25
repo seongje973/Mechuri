@@ -19,6 +19,7 @@ import { addHistory, getAvoidTags, getFavorites, getHistories, isFavorite, toggl
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { openDelivery } from '../utils/openDelivery';
+import { AcceptAction, newSessionId, track } from '../analytics/events';
 
 const { width } = Dimensions.get('window');
 
@@ -93,6 +94,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [eatenMenu, setEatenMenu] = useState<string | null>(null);
   const [favorited, setFavorited] = useState(false);
   const selectedNameRef = useRef<string | null>(null);
+  // 지표용 추천 세션 ID (US-23). 추천 한 판마다 새로 만든다
+  const analyticsSessionRef = useRef<string | null>(null);
+  const trackAccept = (action: AcceptAction, menu: string) =>
+    track(analyticsSessionRef.current, { type: 'accept', payload: { action, menu } });
   const revealAnim = useRef(new Animated.Value(0)).current;
 
   // 지금 묻는 질문 번호 (1부터)
@@ -128,7 +133,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 홈의 "바로 추천"은 autoStart 값을 바꿔 보낸다. 인트로를 건너뛰고 첫 질문부터 시작한다
   const autoStart = route?.params?.autoStart;
   useEffect(() => {
-    if (autoStart) startAkinator([]);
+    if (autoStart) startAkinator([], true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
@@ -174,7 +179,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 아키네이터 게임 기동
-  const startAkinator = async (excluded: string[] = excludedCategories) => {
+  const startAkinator = async (excluded: string[] = excludedCategories, auto = false) => {
     // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags)은 시작 전에 후보에서 뺀다
     let avoidTags: string[] = [];
     try {
@@ -188,6 +193,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       Alert.alert("경고 ⚠️", "제외한 장르와 기피 재료 때문에 남은 메뉴가 없어요. 조건을 조금 풀어 주세요.");
       return;
     }
+
+    analyticsSessionRef.current = newSessionId();
+    track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
     setSession(first);
     setGameState('questioning');
@@ -206,6 +214,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const handleAnswer = (answer: ScoreAnswer) => {
     if (!session || !currentQuestion) return;
+    track(analyticsSessionRef.current, {
+      type: 'question_answer',
+      payload: { questionId: currentQuestion.id, answer, index: session.answers.length }
+    });
     const next = answerQuestion(session, currentQuestion, answer);
     setSession(next);
     goNext(next);
@@ -223,7 +235,19 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     }
   };
 
-  const showResults = (ranked: RecommendResult[]) => {
+  const showResults = (ranked: RecommendResult[], finalSession: RecommendSession | null, via?: 'worldcup') => {
+    if (ranked[0]) {
+      track(analyticsSessionRef.current, {
+        type: 'result_shown',
+        payload: {
+          menu: ranked[0].item.name,
+          alternatives: ranked.slice(1).map(r => r.item.name),
+          questions: finalSession?.answers.length ?? 0,
+          retries: finalSession?.rejected.length ?? 0,
+          ...(via ? { via } : {})
+        }
+      });
+    }
     setResults(ranked);
     setEatenMenu(null);
     setGameState('reveal');
@@ -240,13 +264,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     // "틀렸어요" 뒤에는 처음 불러온 보정값을 그대로 쓴다
     const adj = finalSession.rejected.length > 0 ? adjustments : await loadAdjustments();
     setAdjustments(adj);
-    showResults(getResults(finalSession, QUESTIONS, adj));
+    showResults(getResults(finalSession, QUESTIONS, adj), finalSession);
   };
 
   // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
   const handleReject = () => {
     const top = results[0];
     if (!session || !top || !canReject(session)) return;
+    track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: session.rejected.length } });
     const next = rejectTopResult(session, top.item.name);
     setSession(next);
     setSelectedMenu(null);
@@ -268,7 +293,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const handleWorldCupWinner = (menu: MenuItem) => {
     const winner = worldCupResults.find(r => r.item.name === menu.name);
     if (!winner) return;
-    showResults([winner, ...worldCupResults.filter(r => r !== winner)].slice(0, results.length || 3));
+    showResults([winner, ...worldCupResults.filter(r => r !== winner)].slice(0, 3), session, 'worldcup');
   };
 
   // 대안을 누르면 1위 자리로 올린다
@@ -310,6 +335,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const handleOpenMap = async (res: Restaurant) => {
     if (!selectedMenu) return;
+    trackAccept('restaurant', selectedMenu.name);
 
     try {
       await addHistory({
@@ -327,6 +353,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   const handleOpenBaemin = async (menuName: string) => {
+    trackAccept('delivery', menuName);
     const opened = await openDelivery(menuName);
     if (opened === 'failed') {
       Alert.alert("배달 앱을 열지 못했어요", "배달의민족 앱이나 브라우저를 확인해 주세요.");
@@ -335,12 +362,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // "근처 식당" (US-20): 지도 탭에서 이 메뉴로 반경 1.5km 검색
   const handleNearby = (menu: MenuItem) => {
+    trackAccept('restaurant', menu.name);
     navigation.navigate("지도", { keyword: menu.name, requestedAt: Date.now() });
   };
 
   // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다 (게스트는 기기에)
   const handleEatThis = async (menu: MenuItem) => {
     setEatenMenu(menu.name);
+    trackAccept('eat', menu.name);
     try {
       await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
     } catch (e) {
@@ -358,6 +387,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         category: selectedMenu.category
       });
       setFavorited(favorited);
+      if (favorited) trackAccept('favorite', selectedMenu.name);
     } catch (e) {
       Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
     }

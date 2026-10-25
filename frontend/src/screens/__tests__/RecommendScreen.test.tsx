@@ -8,6 +8,11 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
 }));
 
+jest.mock('../../analytics/events', () => ({
+  newSessionId: jest.fn(() => 'session-test-0001'),
+  track: jest.fn(),
+}));
+
 jest.mock('../../storage/userData', () => ({
   addHistory: jest.fn(async () => {}),
   getAvoidTags: jest.fn(async () => []),
@@ -135,5 +140,18 @@ describe('RecommendScreen', () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     expect(addHistory).toHaveBeenCalledWith(expect.objectContaining({ menuName: shownTop() }));
   });
-});
 
+  it('추천 한 판의 지표 이벤트를 같은 세션 ID로 보낸다 (US-23)', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    track.mockClear();
+    await reachReveal();
+    const top = shownTop();
+    fireEvent.press(screen.getByText('배달'));
+    const types = track.mock.calls.map((c: any[]) => c[1].type);
+    expect(types[0]).toBe('rec_start');
+    expect(types).toContain('question_answer');
+    expect(types).toContain('result_shown');
+    expect(track).toHaveBeenLastCalledWith('session-test-0001', { type: 'accept', payload: { action: 'delivery', menu: top } });
+    expect(track.mock.calls.every((c: any[]) => c[0] === 'session-test-0001')).toBe(true);
+  });
+});
