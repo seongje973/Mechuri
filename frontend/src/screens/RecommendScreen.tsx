@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -10,7 +10,8 @@ import {
   Linking, 
   ActivityIndicator,
   Dimensions,
-  Alert
+  Alert,
+  Animated
 } from 'react-native';
 import * as Location from 'expo-location';
 import { apiFetch, getStoredProfile } from '../api/client';
@@ -21,17 +22,27 @@ const { width } = Dimensions.get('window');
 const CUISINE_EMOJI: Record<Cuisine, string> = { 한식: '🇰🇷', 중식: '🇨🇳', 일식: '🇯🇵', 양식: '🍕', 분식: '🍢', 아시안: '🍜' };
 
 import { Question, QUESTIONS } from '../constants/akinatorQuestions';
+import { createScoreSession } from '../engine/scoreEngine';
 import {
-  Answer,
-  MAX_QUESTIONS,
-  RecentMeal,
-  applyAnswer,
-  buildInitialPool,
-  parseAvoidTags,
+  RecommendResult,
+  RecommendSession,
+  answerQuestion,
+  getResults,
   pickNextQuestion,
-  rankResults,
-  shouldStop
-} from '../engine/filterEngine';
+  shouldStop,
+  toRecommendSession
+} from '../engine/recommendFlow';
+import { MAX_QUESTIONS, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
+import { recentMealAdjustments } from '../engine/personalize';
+
+const parseAvoidTags = (raw?: string | null): string[] => (raw ? raw.split(',').filter(Boolean) : []);
+
+const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
+  { answer: 'yes', label: '👍 예' },
+  { answer: 'probably', label: '🙂 아마도' },
+  { answer: 'dontcare', label: '🤷 상관없음' },
+  { answer: 'no', label: '👎 아니오' }
+];
 
 interface Restaurant {
   name: string;
@@ -52,25 +63,29 @@ const getOfflineFallbackRestaurants = (menuName: string): Restaurant[] => {
 
 interface RecommendScreenProps {
   navigation: any;
+  route?: { params?: { autoStart?: number } };
   isLoggedIn: boolean;
   userProfile: any;
 }
 
-export default function RecommendScreen({ navigation, isLoggedIn, userProfile }: RecommendScreenProps) {
+export default function RecommendScreen({ navigation, route, isLoggedIn, userProfile }: RecommendScreenProps) {
   // 게임 단계: 'intro' (사전 제외 장르 선택) | 'questioning' (아키네이터 구동) | 'reveal' (결과 목록)
   const [gameState, setGameState] = useState<'intro' | 'questioning' | 'reveal'>('intro');
   
   // 오늘 먹기 싫어 선택 제외할 음식 카테고리 상태 (다중선택)
   const [excludedCategories, setExcludedCategories] = useState<string[]>([]);
   
-  // 아키네이터 연동 핵심 상태값들
-  const [pool, setPool] = useState<MenuItem[]>(MENU_DATA);
-  const [askedQuestionIds, setAskedQuestionIds] = useState<string[]>([]);
+  // 점수 방식 엔진 상태 (src/engine/recommendFlow.ts)
+  const [session, setSession] = useState<RecommendSession | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
-  const [questionCount, setQuestionCount] = useState<number>(0);
 
-  const [matchingResults, setMatchingResults] = useState<MenuItem[]>([]);
+  // 결과: [0]이 지금 보여주는 메뉴, 나머지가 대안
+  const [results, setResults] = useState<RecommendResult[]>([]);
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  const revealAnim = useRef(new Animated.Value(0)).current;
+
+  // 지금 묻는 질문 번호 (1부터)
+  const questionNumber = (session?.answers.length ?? 0) + 1;
 
   // GPS 위치 및 백엔드 통신용 상태값
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
@@ -97,14 +112,19 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
     })();
   }, []);
 
+  // 홈의 "바로 추천"은 autoStart 값을 바꿔 보낸다. 인트로를 건너뛰고 첫 질문부터 시작한다
+  const autoStart = route?.params?.autoStart;
+  useEffect(() => {
+    if (autoStart) startAkinator([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
+
   // 아키네이터 인트로 셋업 및 초기화
   const resetGame = () => {
     setExcludedCategories([]);
-    setPool(MENU_DATA);
-    setAskedQuestionIds([]);
+    setSession(null);
     setCurrentQuestion(null);
-    setQuestionCount(0);
-    setMatchingResults([]);
+    setResults([]);
     setSelectedMenu(null);
     setRestaurantsList([]);
     setGameState('intro');
@@ -138,84 +158,77 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
   };
 
   // 아키네이터 게임 기동
-  const startAkinator = async () => {
-    // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags) 차단
+  const startAkinator = async (excluded: string[] = excludedCategories) => {
+    // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags)은 시작 전에 후보에서 뺀다
     let avoidTags: string[] = [];
     try {
       const profile = await getStoredProfile();
       avoidTags = parseAvoidTags(profile?.avoidTags);
-      if (avoidTags.length > 0) console.log("🚫 Akinator Pre-filtering avoid tags:", avoidTags);
     } catch (e) {
       console.log("Failed to load user avoid tags on setup", e);
     }
-    const initialPool = buildInitialPool(MENU_DATA, excludedCategories, avoidTags);
+    const first = toRecommendSession(createScoreSession(MENU_DATA, { avoidTags, excludedCategories: excluded }));
 
-    if (initialPool.length === 0) {
-      Alert.alert("경고 ⚠️", "모든 메뉴 카테고리를 제외하셨습니다. 최소 한 개 이상의 종류를 남겨두세요.");
+    if (first.candidates.length === 0) {
+      Alert.alert("경고 ⚠️", "제외한 장르와 기피 재료 때문에 남은 메뉴가 없어요. 조건을 조금 풀어 주세요.");
       return;
     }
 
-    setPool(initialPool);
-    setAskedQuestionIds([]);
-    setQuestionCount(0);
+    setSession(first);
     setGameState('questioning');
-    
-    // 첫 질문 선택 구동
-    determineNextQuestion(initialPool, []);
+    goNext(first);
   };
 
-  // 예/아니오가 가장 반반으로 나뉘는 다음 질문 선정
-  const determineNextQuestion = (currentPool: MenuItem[], askedIds: string[]) => {
-    const nextQuestion = pickNextQuestion(currentPool, QUESTIONS, askedIds);
-    if (nextQuestion) {
-      setCurrentQuestion(nextQuestion);
-      setQuestionCount(prev => prev + 1);
+  // 다음 질문으로 가거나, 멈출 조건이면 결과로
+  const goNext = (next: RecommendSession) => {
+    const question = shouldStop(next, QUESTIONS) ? null : pickNextQuestion(next, QUESTIONS);
+    if (question) {
+      setCurrentQuestion(question);
     } else {
-      finishAkinator(currentPool);
+      finishAkinator(next);
     }
   };
 
-  // 아키네이터 답변 접수 및 동적 연산 처리
-  const handleAnswer = (answerType: Answer) => {
-    if (!currentQuestion) return;
-
-    const newPool = applyAnswer(pool, currentQuestion, answerType);
-    const nextAskedIds = [...askedQuestionIds, currentQuestion.id];
-    setAskedQuestionIds(nextAskedIds);
-    setPool(newPool);
-
-    if (shouldStop(newPool, questionCount)) {
-      finishAkinator(newPool);
-    } else {
-      determineNextQuestion(newPool, nextAskedIds);
-    }
+  const handleAnswer = (answer: ScoreAnswer) => {
+    if (!session || !currentQuestion) return;
+    const next = answerQuestion(session, currentQuestion, answer);
+    setSession(next);
+    goNext(next);
   };
 
-  // 최종 채점 및 랭킹 정렬 및 겹침 회피 적용
-  const finishAkinator = async (finalPool: MenuItem[]) => {
-    setGameState('reveal');
-    const rankedPool = finalPool.length > 0 ? finalPool : (pool.length > 0 ? pool : MENU_DATA);
-
-    // 최근 식사 히스토리로 겹침 방지 감점
-    let recentMeals: RecentMeal[] = [];
+  // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
+  const finishAkinator = async (finalSession: RecommendSession) => {
+    setCurrentQuestion(null);
+    let adjustments: Record<string, number> = {};
     if (isLoggedIn) {
       try {
         const res = await apiFetch(`/api/user/histories`);
         if (res.ok) {
           const data = await res.json();
-          recentMeals = data.histories || [];
+          adjustments = recentMealAdjustments(data.histories || []);
         }
       } catch (e) {
-        console.log("Failed to fetch history for Akinator scoring calculation", e);
+        console.log("Failed to fetch history for recommendation adjustments", e);
       }
     }
 
-    const sorted = rankResults(rankedPool, recentMeals);
-    setMatchingResults(sorted);
-    
-    if (sorted.length > 0) {
-      onSelectMenu(sorted[0]); // 첫 번째 1위 점수 획득 메뉴 자동 로드
+    const ranked = getResults(finalSession, QUESTIONS, adjustments);
+    setResults(ranked);
+    setGameState('reveal');
+    revealAnim.setValue(0);
+    Animated.spring(revealAnim, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();
+
+    if (ranked.length > 0) {
+      onSelectMenu(ranked[0].item);
     }
+  };
+
+  // 대안을 누르면 1위 자리로 올린다
+  const promoteAlternative = (index: number) => {
+    const picked = results[index];
+    if (!picked) return;
+    setResults([picked, ...results.filter((_, i) => i !== index)]);
+    onSelectMenu(picked.item);
   };
 
   const onSelectMenu = async (menu: MenuItem) => {
@@ -366,7 +379,7 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
             })}
           </View>
 
-          <TouchableOpacity style={styles.startButton} onPress={startAkinator}>
+          <TouchableOpacity style={styles.startButton} onPress={() => startAkinator()}>
             <Text style={styles.startButtonText}>추리 퀴즈 시작하기 ➔</Text>
           </TouchableOpacity>
         </View>
@@ -378,14 +391,14 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
           {/* Header Progress */}
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>질문 {questionCount} / {MAX_QUESTIONS}</Text>
-              <Text style={styles.poolCountText}>남은 메뉴 후보: {pool.length}개</Text>
+              <Text style={styles.progressText}>질문 {questionNumber} / {MAX_QUESTIONS}</Text>
+              <Text style={styles.poolCountText}>후보 메뉴 {session?.candidates.length ?? 0}개</Text>
             </View>
             <View style={styles.progressBarBackground}>
               <View 
                 style={[
                   styles.progressBarFill, 
-                  { width: `${(questionCount / MAX_QUESTIONS) * 100}%` }
+                  { width: `${(questionNumber / MAX_QUESTIONS) * 100}%` }
                 ]} 
               />
             </View>
@@ -397,29 +410,26 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
             <Text style={styles.questionText}>{currentQuestion.text}</Text>
           </View>
 
-          {/* Akinator 3지선다 버튼 */}
-          <View style={styles.akinatorButtons}>
-            <TouchableOpacity 
-              style={[styles.btnAnswer, styles.btnYes]}
-              onPress={() => handleAnswer('yes')}
-            >
-              <Text style={styles.btnAnswerText}>👍 예 (좋아요)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.btnAnswer, styles.btnNo]}
-              onPress={() => handleAnswer('no')}
-            >
-              <Text style={styles.btnAnswerText}>👎 아니오 (싫어요)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.btnAnswer, styles.btnDontKnow]}
-              onPress={() => handleAnswer('dontknow')}
-            >
-              <Text style={styles.btnAnswerText}>🤷 상관없음 (잘 모름)</Text>
-            </TouchableOpacity>
+          {/* 답변 4개: 엄지로 누르기 쉽게 2 x 2 */}
+          <View style={styles.answerGrid}>
+            {ANSWER_BUTTONS.map(({ answer, label }) => (
+              <TouchableOpacity
+                key={answer}
+                style={[styles.answerCell, styles[`answer_${answer}`]]}
+                onPress={() => handleAnswer(answer)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.btnAnswerText}>{label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
+
+          {/* 귀찮으면 지금 점수로 바로 결과 (3번째 질문부터) */}
+          {questionNumber >= SHOW_SKIP_FROM_QUESTION && session && (
+            <TouchableOpacity style={styles.skipButton} onPress={() => finishAkinator(session)}>
+              <Text style={styles.skipButtonText}>바로 결과 보기 ➔</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity style={styles.resetButton} onPress={resetGame}>
             <Text style={styles.resetButtonText}>처음으로 돌아가기</Text>
@@ -430,34 +440,46 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
       {/* 3. 추천 결과 단계 */}
       {gameState === 'reveal' && (
         <ScrollView style={styles.scrollReveal} contentContainerStyle={styles.revealContainer} showsVerticalScrollIndicator={false}>
-          <Text style={styles.revealTitle}>🕵️‍♂️ 메추리 요정의 추리 결과!</Text>
-          <Text style={styles.revealSubtitle}>아키네이터 답변과 최근 식습관 감점을 고려한 최적의 식사 정렬 목록입니다.</Text>
+          {results[0] && (
+            <Animated.View
+              style={[
+                styles.revealHero,
+                { opacity: revealAnim, transform: [{ scale: revealAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }
+              ]}
+            >
+              <Text style={styles.revealLead}>당신이 생각한 메뉴는…</Text>
+              <Text style={styles.revealEmoji}>{results[0].item.emoji}</Text>
+              <Text style={styles.revealName}>{results[0].item.name}!</Text>
+              <View style={styles.reasonRow}>
+                {results[0].reasons.map(reason => (
+                  <View key={reason} style={styles.reasonChip}>
+                    <Text style={styles.reasonChipText}>{reason}</Text>
+                  </View>
+                ))}
+              </View>
+            </Animated.View>
+          )}
 
-          {/* 추천 메뉴 가로 스크롤 카드 리스트 */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={styles.menuHorizontalList}
-          >
-            {matchingResults.map((item, idx) => {
-              const isSelected = selectedMenu?.name === item.name;
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.menuTile,
-                    isSelected && styles.menuTileSelected
-                  ]}
-                  onPress={() => onSelectMenu(item)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.menuTileEmoji}>{item.emoji}</Text>
-                  <Text style={styles.menuTileName}>{item.name}</Text>
-                  <Text style={styles.menuTileCategory}>{item.category}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          {/* 대안 2개: 누르면 1위 자리로 */}
+          {results.length > 1 && (
+            <View style={styles.altSection}>
+              <Text style={styles.altTitle}>이건 어때요?</Text>
+              <View style={styles.altRow}>
+                {results.slice(1).map((r, i) => (
+                  <TouchableOpacity
+                    key={r.item.name}
+                    style={styles.altCard}
+                    onPress={() => promoteAlternative(i + 1)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.altEmoji}>{r.item.emoji}</Text>
+                    <Text style={styles.altName} testID="alt-name">{r.item.name}</Text>
+                    <Text style={styles.altReason} numberOfLines={1}>{r.reasons.join(' · ')}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* 선택된 음식 상세 설명 패널 */}
           {selectedMenu && (
@@ -539,6 +561,116 @@ export default function RecommendScreen({ navigation, isLoggedIn, userProfile }:
 }
 
 const styles = StyleSheet.create({
+  answerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  answerCell: {
+    width: '48.5%',
+    minHeight: 64,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  answer_yes: { backgroundColor: '#16a34a' },
+  answer_probably: { backgroundColor: '#65a30d' },
+  answer_dontcare: { backgroundColor: '#57534e' },
+  answer_no: { backgroundColor: '#dc2626' },
+  skipButton: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.5)',
+    marginTop: 4,
+  },
+  skipButtonText: {
+    color: '#fbbf24',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  revealHero: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(251, 191, 36, 0.08)',
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+    borderWidth: 1,
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  revealLead: {
+    color: '#d6d3d1',
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  revealEmoji: {
+    fontSize: 56,
+    marginBottom: 4,
+  },
+  revealName: {
+    color: '#fbbf24',
+    fontSize: 30,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  reasonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  reasonChip: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    margin: 3,
+  },
+  reasonChipText: {
+    color: '#f5f5f4',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  altSection: {
+    marginBottom: 18,
+  },
+  altTitle: {
+    color: '#a8a29e',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  altRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  altCard: {
+    width: '48.5%',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    alignItems: 'center',
+  },
+  altEmoji: {
+    fontSize: 30,
+    marginBottom: 4,
+  },
+  altName: {
+    color: '#f5f5f4',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  altReason: {
+    color: '#a8a29e',
+    fontSize: 12,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: '#1c1917', // Warm Dark Stone
@@ -677,10 +809,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  akinatorButtons: {
-    width: '100%',
-    marginBottom: 20,
-  },
   btnAnswer: {
     borderRadius: 16,
     paddingVertical: 14,
@@ -691,19 +819,6 @@ const styles = StyleSheet.create({
   btnAnswerText: {
     fontSize: 14.5,
     fontWeight: '800',
-  },
-  btnYes: {
-    backgroundColor: 'rgba(251, 191, 36, 0.08)',
-    borderColor: '#fbbf24',
-    color: '#fbbf24',
-  },
-  btnNo: {
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-  },
-  btnDontKnow: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   resetButton: {
     paddingVertical: 6,
@@ -723,59 +838,6 @@ const styles = StyleSheet.create({
   revealContainer: {
     padding: 20,
     paddingBottom: 40,
-  },
-  revealTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#fbbf24',
-    marginBottom: 6,
-  },
-  revealSubtitle: {
-    fontSize: 12,
-    color: '#a8a29e',
-    marginBottom: 20,
-  },
-  menuHorizontalList: {
-    paddingRight: 20,
-    marginBottom: 24,
-    height: 130,
-  },
-  menuTile: {
-    width: 110,
-    height: 120,
-    backgroundColor: 'rgba(41, 37, 36, 0.5)',
-    borderRadius: 20,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.08)',
-  },
-  menuTileSelected: {
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    borderColor: '#fbbf24',
-    borderWidth: 2,
-    shadowColor: '#fbbf24',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  menuTileEmoji: {
-    fontSize: 36,
-    marginBottom: 8,
-  },
-  menuTileName: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  menuTileCategory: {
-    color: '#78716c',
-    fontSize: 10,
   },
   selectedDetailCard: {
     backgroundColor: 'rgba(41, 37, 36, 0.8)',
