@@ -62,7 +62,7 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
     try {
       setLoadingRanking(true);
       setRankingFailed(false);
-      const response = await apiFetch(`/api/restaurants/ranking`);
+      const response = await apiFetch(`/api/restaurants/ranking`, { timeoutMs: 8000 });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setRankingList(data.ranking || []);
