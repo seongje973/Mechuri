@@ -99,6 +99,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const weatherRoundRef = useRef(0);
   // 시작 요청마다 올라간다. 기피 태그를 읽는 사이 다시 시작했거나 초기화했으면 이전 요청은 버린다
   const startRequestRef = useRef(0);
+  // 질문 화면에 떠 있는 판을 시작한 요청 번호. startRequestRef보다 작으면 새 시작이 진행 중이다
+  const activeStartRequestRef = useRef(0);
   const weatherPromiseRef = useRef<Promise<void> | null>(null);
   // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
@@ -223,10 +225,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const first = toRecommendSession(createScoreSession(MENU_DATA, { avoidTags, excludedCategories: excluded }));
 
     if (first.candidates.length === 0) {
+      // 새 판을 못 열었으니 지금 판을 계속 진행할 수 있게 진행 중 표시를 거둔다
+      if (startRequestRef.current === startRequest) startRequestRef.current = activeStartRequestRef.current;
       Alert.alert("경고 ⚠️", "제외한 장르와 기피 재료 때문에 남은 메뉴가 없어요. 조건을 조금 풀어 주세요.");
       return;
     }
 
+    activeStartRequestRef.current = startRequest;
     eatRoundRef.current += 1;
     weatherRoundRef.current += 1;
     weatherRef.current = null;
@@ -327,13 +332,15 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   const finishAkinator = async (finalSession: RecommendSession) => {
+    // 새 시작 요청은 기피 태그를 읽는 동안 판 번호를 아직 올리지 않았으므로 요청 번호도 본다.
+    // 새 판이 열리는 중이면 지금 판의 결과는 계산하지 않는다
+    const startRequest = activeStartRequestRef.current;
+    if (startRequestRef.current !== startRequest) return;
     setCurrentQuestion(null);
     // 추천을 시작할 때마다 올라가는 판 번호
     const round = weatherRoundRef.current;
     // 화면을 떠나면 판이 끝난다 (analyticsSessionRef가 비워짐)
     const analyticsSession = analyticsSessionRef.current;
-    // 새 시작 요청은 기피 태그를 읽는 동안 판 번호를 아직 올리지 않았으므로 요청 번호도 본다
-    const startRequest = startRequestRef.current;
     // "틀렸어요" 뒤에는 처음 계산한 보정값을 그대로 쓴다
     let adj = adjustments;
     let reasons = contextReasons;

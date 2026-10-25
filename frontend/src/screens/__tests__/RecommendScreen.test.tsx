@@ -534,6 +534,41 @@ describe('RecommendScreen', () => {
       expect(screen.getByText('질문 1 / 7')).toBeTruthy();
     });
 
+    it('새 추천이 기피 태그를 읽는 사이 이전 판에서 결과를 요청해도 이전 판 결과를 띄우지 않는다', async () => {
+      const { getAvoidTags } = jest.requireMock('../../storage/userData');
+      const { track } = jest.requireMock('../../analytics/events');
+      let tags!: (v: string[]) => void;
+      const navigation = { navigate: jest.fn() };
+      const view = render(<RecommendScreen navigation={navigation} isLoggedIn={false} userProfile={null} />);
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 3; i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('🤷 상관없음'));
+        });
+      }
+      getAvoidTags.mockImplementationOnce(() => new Promise(r => (tags = r)));
+      await act(async () => {
+        view.rerender(
+          <RecommendScreen navigation={navigation} route={{ params: { autoStart: 1 } }} isLoggedIn={false} userProfile={null} />
+        );
+      });
+      track.mockClear();
+      await act(async () => {
+        fireEvent.press(screen.getByText('바로 결과 보기 ➔'));
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 0));
+      });
+      expect(screen.queryByText('당신이 생각한 메뉴는…')).toBeNull();
+      expect(track.mock.calls.some((c: any[]) => c[1].type === 'result_shown')).toBe(false);
+      await act(async () => {
+        tags([]);
+      });
+      expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    });
+
     it('결과를 계산하는 사이 새 추천을 시작하면 이전 판 결과를 띄우지 않는다', async () => {
       const { getHistories } = jest.requireMock('../../storage/userData');
       let histories!: (v: unknown[]) => void;
