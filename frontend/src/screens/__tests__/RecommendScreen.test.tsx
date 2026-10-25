@@ -223,6 +223,49 @@ describe('RecommendScreen', () => {
     expect(toggleFavorite).toHaveBeenCalledTimes(2);
   });
 
+  it('이전 판의 저장이 새 판에서 늦게 끝나도 새 판의 먹을래요 버튼은 그대로다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finishOld!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishOld = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    await act(async () => {
+      finishOld();
+    });
+    expect(screen.getByText('이거 먹을래요')).toBeTruthy();
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+  });
+
+  it('지도보기로 식당을 살펴보기만 하면 먹은 기록을 남기지 않는다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    apiFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ restaurants: [{ name: '진짜식당', distance: '350m', category: '한식', rating: 4.5, type: '식당', url: '', address: '서울', latitude: 37.5, longitude: 127 }], histories: [] }),
+    }));
+    const navigate = await reachReveal();
+    addHistory.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('지도보기 ➔'));
+    });
+    expect(navigate).toHaveBeenCalledWith('지도', expect.objectContaining({ restaurant: expect.objectContaining({ name: '진짜식당' }) }));
+    expect(addHistory).not.toHaveBeenCalled();
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
+  });
+
   it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();

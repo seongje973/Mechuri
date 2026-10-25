@@ -98,6 +98,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const favoriteOpRef = useRef(0);
   // 하트 저장은 하나씩 차례로 한다. 게스트 목록은 읽고-고쳐-쓰기라 겹치면 앞 변경이 사라진다
   const favoriteQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  // 새 판을 시작할 때마다 올라가는 번호. 이전 판의 저장이 늦게 끝나도 새 판의 "먹을래요" 표시를 건드리지 않는다
+  const eatRoundRef = useRef(0);
   const revealAnim = useRef(new Animated.Value(0)).current;
 
   // 지금 묻는 질문 번호 (1부터)
@@ -139,6 +141,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 아키네이터 인트로 셋업 및 초기화
   const resetGame = () => {
+    eatRoundRef.current += 1;
     setExcludedCategories([]);
     setSession(null);
     setCurrentQuestion(null);
@@ -194,6 +197,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       return;
     }
 
+    eatRoundRef.current += 1;
     setSession(first);
     setGameState('questioning');
     goNext(first);
@@ -322,18 +326,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const handleOpenMap = async (res: Restaurant) => {
     if (!selectedMenu) return;
-
-    try {
-      await addHistory({
-        menuName: selectedMenu.name,
-        emoji: selectedMenu.emoji,
-        restaurantName: res.name,
-        category: selectedMenu.category
-      });
-    } catch (e) {
-      console.log("Failed to save eaten history", e);
-    }
-
+    // 지도로 식당을 살펴보는 것만으로는 먹은 기록을 남기지 않는다. 기록은 "이거 먹을래요"에서만 (최근 먹은 메뉴 감점에 쓰임)
     console.log("📡 Navigating to in-app map screen with restaurant param:", res.name);
     navigation.navigate("지도", { restaurant: res });
   };
@@ -354,16 +347,20 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 저장 중에 같은 메뉴를 한 번 더 눌러도 기록이 두 번 남지 않게 막는다 (다른 메뉴는 따로 저장)
   const savingMenusRef = useRef(new Set<string>());
   const handleEatThis = async (menu: MenuItem) => {
-    if (savingMenusRef.current.has(menu.name)) return;
-    savingMenusRef.current.add(menu.name);
+    const round = eatRoundRef.current;
+    const savingKey = `${round}:${menu.name}`;
+    if (savingMenusRef.current.has(savingKey)) return;
+    savingMenusRef.current.add(savingKey);
     try {
       await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
-      setEatenMenus(prev => (prev.includes(menu.name) ? prev : [...prev, menu.name]));
+      if (round === eatRoundRef.current) {
+        setEatenMenus(prev => (prev.includes(menu.name) ? prev : [...prev, menu.name]));
+      }
     } catch (e) {
       console.log("Failed to save eaten history", e);
       Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
     } finally {
-      savingMenusRef.current.delete(menu.name);
+      savingMenusRef.current.delete(savingKey);
     }
   };
 
