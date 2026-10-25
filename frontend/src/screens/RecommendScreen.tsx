@@ -105,6 +105,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const analyticsSessionRef = useRef<string | null>(null);
   const trackAccept = (action: AcceptAction, menu: string) =>
     track(analyticsSessionRef.current, { type: 'accept', payload: { action, menu } });
+  // 하트 조회·토글마다 올라가는 번호. 늦게 온 이전 결과가 하트를 되돌리지 않게 한다
+  const favoriteOpRef = useRef(0);
   const revealAnim = useRef(new Animated.Value(0)).current;
 
   // 지금 묻는 질문 번호 (1부터)
@@ -361,8 +363,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setSelectedMenu(menu);
     setFavorited(false);
     selectedNameRef.current = menu.name;
+    const favoriteOp = ++favoriteOpRef.current;
     isFavorite(menu.name)
-      .then(f => { if (selectedNameRef.current === menu.name) setFavorited(f); })
+      .then(f => { if (favoriteOpRef.current === favoriteOp) setFavorited(f); })
       .catch(() => {});
     setLoadingRestaurants(true);
     setRestaurantsList([]);
@@ -420,30 +423,36 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // "이거 먹을래요" (US-20): 먹은 기록으로 남긴다 (게스트는 기기에)
+  // 저장 중에 한 번 더 눌러도 기록이 두 번 남지 않게 막는다
+  const eatingRef = useRef(false);
   const handleEatThis = async (menu: MenuItem) => {
+    if (eatingRef.current) return;
+    eatingRef.current = true;
     try {
       await addHistory({ menuName: menu.name, emoji: menu.emoji, category: menu.category });
+      setEatenMenu(menu.name);
+      trackAccept('eat', menu.name);
     } catch (e) {
       console.log("Failed to save eaten history", e);
       Alert.alert("기록하지 못했어요", "잠시 후 다시 눌러 주세요.");
-      return;
+    } finally {
+      eatingRef.current = false;
     }
-    setEatenMenu(menu.name);
-    trackAccept('eat', menu.name);
   };
 
   // 하트: 게스트도 기기에 저장한다. 로그인 안내는 저장소가 정한 때(3개째)만 뜬다 (US-17)
   const handleToggleFavorite = async () => {
     if (!selectedMenu) return;
     const menuName = selectedMenu.name;
+    const favoriteOp = ++favoriteOpRef.current;
     try {
       const { favorited } = await toggleFavorite({
         menuName,
         emoji: selectedMenu.emoji,
         category: selectedMenu.category
       });
-      // 저장하는 사이 다른 메뉴를 골랐으면 그 메뉴 하트를 덮어쓰지 않는다
-      if (selectedNameRef.current === menuName) setFavorited(favorited);
+      // 저장하는 사이 다른 메뉴를 골랐거나 다시 조회했으면 덮어쓰지 않는다
+      if (favoriteOpRef.current === favoriteOp && selectedNameRef.current === menuName) setFavorited(favorited);
       if (favorited) trackAccept('favorite', menuName);
     } catch (e) {
       Alert.alert("에러", "즐겨찾기 저장에 실패했습니다.");
