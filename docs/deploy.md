@@ -68,9 +68,11 @@ npm install -g eas-cli
 cd frontend
 eas login                       # Expo 계정
 eas init                        # 프로젝트 연결 (app.json에 projectId가 들어감)
-eas env:create --name EXPO_PUBLIC_KAKAO_CLIENT_ID --value <카카오 REST API 키> --environment preview --environment production --visibility plaintext
+eas env:create --name EXPO_PUBLIC_KAKAO_CLIENT_ID --value "카카오_REST_API_키" --environment preview --environment production --visibility plaintext
 eas build -p android --profile preview
 ```
+
+`"카카오_REST_API_키"` 자리에 실제 키를 따옴표째 넣으세요.
 
 - 처음 빌드할 때 안드로이드 패키지 이름(예: `com.seongje973.mechuri`)을 물어보면 정해서 넣습니다. 한 번 정하면 스토어에 올린 뒤에는 바꿀 수 없습니다.
 - 빌드가 끝나면 나오는 링크(또는 QR)로 APK를 받아 설치합니다. 지인에게는 이 링크를 보내면 됩니다.
