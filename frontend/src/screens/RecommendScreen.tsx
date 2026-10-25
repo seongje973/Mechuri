@@ -40,6 +40,7 @@ import {
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer } from '../engine/config';
 import { personalAdjustments } from '../engine/personalize';
+import { RecommendContext, contextAdjustments, mergeAdjustments } from '../engine/context';
 
 
 const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
@@ -90,7 +91,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   // 결과 계산에 쓴 개인화 보정. "틀렸어요" 뒤 다시 계산할 때도 같은 값을 쓴다
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
+  const [contextReasons, setContextReasons] = useState<Record<string, string>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
+  // 추천을 시작할 때 미리 받아 두는 날씨 (L-02). 못 받으면 시간대만 쓴다
+  const weatherRef = useRef<RecommendContext['weather']>(null);
   const [eatenMenu, setEatenMenu] = useState<string | null>(null);
   const [favorited, setFavorited] = useState(false);
   const selectedNameRef = useRef<string | null>(null);
@@ -145,6 +149,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setResults([]);
     setSelectedMenu(null);
     setAdjustments({});
+    setContextReasons({});
     setWorldCupResults([]);
     setEatenMenu(null);
     setRestaurantsList([]);
@@ -194,6 +199,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       return;
     }
 
+    weatherRef.current = null;
+    void loadWeather();
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
@@ -224,6 +231,19 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   // 결과 계산: 답변 점수 + 최근 먹은 메뉴 감점
+  const loadWeather = async () => {
+    if (!userCoords) return;
+    try {
+      const res = await apiFetch(`/api/weather?lat=${userCoords.latitude}&lng=${userCoords.longitude}`, { auth: false, timeoutMs: 3000 });
+      if (res.ok) {
+        const data = await res.json();
+        weatherRef.current = { condition: data.condition, temperature: data.temperature };
+      }
+    } catch (e) {
+      console.log("Weather unavailable, using time of day only");
+    }
+  };
+
   // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21). 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<Record<string, number>> => {
     try {
@@ -261,10 +281,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   const finishAkinator = async (finalSession: RecommendSession) => {
     setCurrentQuestion(null);
-    // "틀렸어요" 뒤에는 처음 불러온 보정값을 그대로 쓴다
-    const adj = finalSession.rejected.length > 0 ? adjustments : await loadAdjustments();
-    setAdjustments(adj);
-    showResults(getResults(finalSession, QUESTIONS, adj), finalSession);
+    // "틀렸어요" 뒤에는 처음 계산한 보정값을 그대로 쓴다
+    let adj = adjustments;
+    let reasons = contextReasons;
+    if (finalSession.rejected.length === 0) {
+      const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
+      adj = mergeAdjustments(await loadAdjustments(), context.adjustments);
+      reasons = context.reasons;
+      setAdjustments(adj);
+      setContextReasons(reasons);
+    }
+    showResults(getResults(finalSession, QUESTIONS, adj, undefined, reasons), finalSession);
   };
 
   // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
@@ -278,7 +305,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setRestaurantsList([]);
 
     if (session.rejected.length >= 1) {
-      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE);
+      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE, contextReasons);
       if (cup.length >= 2) {
         setWorldCupResults(cup);
         setGameState('worldcup');
