@@ -175,12 +175,30 @@ describe('RecommendScreen', () => {
     alert.mockRestore();
   });
 
+  it('배달 앱도 웹도 열지 못하면 배달 수락으로 기록하지 않는다', async () => {
+    const { track } = jest.requireMock('../../analytics/events');
+    const { Linking } = require('react-native');
+    const openURL = jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no app'));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await reachReveal();
+    track.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('배달'));
+    });
+    expect(alert).toHaveBeenCalledWith('배달 앱을 열지 못했어요', expect.any(String));
+    expect(track.mock.calls.some((c: any[]) => c[1].type === 'accept')).toBe(false);
+    openURL.mockRestore();
+    alert.mockRestore();
+  });
+
   it('추천 한 판의 지표 이벤트를 같은 세션 ID로 보낸다 (US-23)', async () => {
     const { track } = jest.requireMock('../../analytics/events');
     track.mockClear();
     await reachReveal();
     const top = shownTop();
-    fireEvent.press(screen.getByText('배달'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('배달'));
+    });
     const types = track.mock.calls.map((c: any[]) => c[1].type);
     expect(types[0]).toBe('rec_start');
     expect(types).toContain('question_answer');
@@ -264,6 +282,49 @@ describe('RecommendScreen', () => {
       finishFirst({ favorited: true, count: 1 });
     });
     expect(toggleFavorite).toHaveBeenCalledTimes(2);
+  });
+
+  it('이전 판의 저장이 새 판에서 늦게 끝나도 새 판의 먹을래요 버튼은 그대로다', async () => {
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    let finishOld!: () => void;
+    addHistory.mockImplementationOnce(() => new Promise<void>(r => (finishOld = r)));
+    await act(async () => {
+      fireEvent.press(screen.getByText('이거 먹을래요'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+    });
+    for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+      await act(async () => {
+        fireEvent.press(screen.getByText('👍 예'));
+      });
+    }
+    await act(async () => {
+      finishOld();
+    });
+    expect(screen.getByText('이거 먹을래요')).toBeTruthy();
+    expect(screen.queryByText('맛있게 드세요!')).toBeNull();
+  });
+
+  it('지도보기로 식당을 살펴보기만 하면 먹은 기록을 남기지 않는다', async () => {
+    const { apiFetch } = jest.requireMock('../../api/client');
+    const { addHistory } = jest.requireMock('../../storage/userData');
+    apiFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ restaurants: [{ name: '진짜식당', distance: '350m', category: '한식', rating: 4.5, type: '식당', url: '', address: '서울', latitude: 37.5, longitude: 127 }], histories: [] }),
+    }));
+    const navigate = await reachReveal();
+    addHistory.mockClear();
+    await act(async () => {
+      fireEvent.press(screen.getByText('지도보기 ➔'));
+    });
+    expect(navigate).toHaveBeenCalledWith('지도', expect.objectContaining({ restaurant: expect.objectContaining({ name: '진짜식당' }) }));
+    expect(addHistory).not.toHaveBeenCalled();
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
   });
 
   it('한 메뉴를 저장하는 중에 다른 메뉴로 바꿔 누르면 그 메뉴도 저장한다', async () => {
@@ -371,6 +432,28 @@ describe('RecommendScreen', () => {
       });
       expect(screen.queryByText('당신이 생각한 메뉴는…')).toBeNull();
       expect(screen.getByText('질문 1 / 7')).toBeTruthy();
+    });
+
+    it('비가 오면 국물 메뉴 결과에 날씨 이유 칩을 붙인다', async () => {
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(async () => ({ status: 'granted' }));
+      Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127 } });
+      apiFetch.mockImplementation(async (path: string) =>
+        String(path).startsWith('/api/weather')
+          ? { ok: true, json: async () => ({ condition: 'rain', temperature: 15 }) }
+          : { ok: true, json: async () => ({ restaurants: [], histories: [] }) }
+      );
+      renderScreen();
+      await act(async () => {});
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+      }
+      expect(await screen.findByText('당신이 생각한 메뉴는…')).toBeTruthy();
+      expect(screen.getByText('비 오는 날엔 국물')).toBeTruthy();
     });
 
     it('날씨 응답이 늦어도 잠깐만 기다리고 결과를 보여 준다', async () => {

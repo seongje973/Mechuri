@@ -92,11 +92,18 @@ export const getHistories = async (): Promise<HistoryEntry[]> => {
   return (data.histories ?? []).map(toHistory);
 };
 
+// 게스트 기록은 읽고-고쳐-쓰기라 저장이 겹치면 앞 기록이 사라진다. 하나씩 차례로 쓴다
+let guestHistoryQueue: Promise<unknown> = Promise.resolve();
+
 export const addHistory = async (entry: NewHistory): Promise<void> => {
   if (await isGuest()) {
-    const list = await readList<HistoryEntry>(GUEST_KEYS.histories);
-    const next = [{ ...entry, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT);
-    await writeList(GUEST_KEYS.histories, next);
+    const run = guestHistoryQueue.then(async () => {
+      const list = await readList<HistoryEntry>(GUEST_KEYS.histories);
+      const next = [{ ...entry, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT);
+      await writeList(GUEST_KEYS.histories, next);
+    });
+    guestHistoryQueue = run.catch(() => undefined);
+    await run;
     return;
   }
   await requestJson('/api/user/histories', { method: 'POST', body: entry });
