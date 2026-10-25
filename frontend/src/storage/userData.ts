@@ -59,7 +59,8 @@ const readList = async <T>(key: string): Promise<T[]> => {
 const readListStrict = async <T>(key: string): Promise<T[]> => {
   const raw = await AsyncStorage.getItem(key);
   const parsed = raw ? JSON.parse(raw) : [];
-  return Array.isArray(parsed) ? parsed : [];
+  if (!Array.isArray(parsed)) throw new Error(`${key} is not a list`);
+  return parsed;
 };
 
 // 게스트 기록·즐겨찾기 쓰기와 로그인 이관을 하나씩 차례로 실행한다.
@@ -70,6 +71,14 @@ const withGuestLock = <T>(task: () => Promise<T>): Promise<T> => {
   guestQueue = run.catch(() => undefined);
   return run;
 };
+
+// 게스트면 큐 안에서 task를 실행해 { value }를, 로그인 상태면 null을 돌려준다.
+// 로그인 요청은 큐 밖에서 보내야 응답이 늦어도 게스트 쓰기와 이관이 막히지 않는다
+const whenGuest = <T>(task: () => Promise<T>): Promise<{ value: T } | null> =>
+  withGuestLock(async () => ((await isGuest()) ? { value: await task() } : null));
+
+/** 로그인 상태의 쓰기 요청 제한 시간 */
+const WRITE_TIMEOUT_MS = 10000;
 
 const writeList = (key: string, list: unknown[]) => AsyncStorage.setItem(key, JSON.stringify(list));
 
@@ -108,16 +117,15 @@ export const getHistories = async (): Promise<HistoryEntry[]> => {
   return (data.histories ?? []).map(toHistory);
 };
 
-export const addHistory = (entry: NewHistory): Promise<void> =>
-  withGuestLock(async () => {
-    if (await isGuest()) {
-      const list = await readListStrict<HistoryEntry>(GUEST_KEYS.histories);
-      const next = [{ ...entry, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT);
-      await writeList(GUEST_KEYS.histories, next);
-      return;
-    }
-    await requestJson('/api/user/histories', { method: 'POST', body: entry });
+export const addHistory = async (entry: NewHistory): Promise<void> => {
+  const guest = await whenGuest(async () => {
+    const list = await readListStrict<HistoryEntry>(GUEST_KEYS.histories);
+    const next = [{ ...entry, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT);
+    await writeList(GUEST_KEYS.histories, next);
   });
+  if (guest) return;
+  await requestJson('/api/user/histories', { method: 'POST', body: entry, timeoutMs: WRITE_TIMEOUT_MS });
+};
 
 export const clearHistories = async (): Promise<void> => {
   if (await isGuest()) {
@@ -143,27 +151,34 @@ export const isFavorite = async (menuName: string): Promise<boolean> =>
  * 있으면 빼고 없으면 넣는다. 결과로 지금 즐겨찾기 상태와 개수를 돌려준다.
  * 게스트가 즐겨찾기를 늘리면 로그인 안내(바텀시트)를 띄울지 loginPrompt가 판단한다.
  */
-export const toggleFavorite = (item: NewFavorite): Promise<{ favorited: boolean; count: number }> =>
-  withGuestLock(async () => {
-    const guest = await isGuest();
-    const list = guest ? await readListStrict<FavoriteEntry>(GUEST_KEYS.favorites) : await getFavorites();
+export const toggleFavorite = async (item: NewFavorite): Promise<{ favorited: boolean; count: number }> => {
+  const guest = await whenGuest(async () => {
+    const list = await readListStrict<FavoriteEntry>(GUEST_KEYS.favorites);
     const exists = list.some(f => f.menuName === item.menuName);
-
-    if (guest) {
-      const next = exists
-        ? list.filter(f => f.menuName !== item.menuName)
-        : [{ ...item, createdAt: new Date().toISOString() }, ...list];
-      await writeList(GUEST_KEYS.favorites, next);
-    } else if (exists) {
-      await requestJson('/api/user/favorites', { method: 'DELETE', body: { menuName: item.menuName } });
-    } else {
-      await requestJson('/api/user/favorites', { method: 'POST', body: item });
-    }
-
-    const result = { favorited: !exists, count: list.length + (exists ? -1 : 1) };
-    if (guest && result.favorited) notifyFavoriteSaved(result.count);
-    return result;
+    const next = exists
+      ? list.filter(f => f.menuName !== item.menuName)
+      : [{ ...item, createdAt: new Date().toISOString() }, ...list];
+    await writeList(GUEST_KEYS.favorites, next);
+    return { favorited: !exists, count: next.length };
   });
+  if (guest) {
+    if (guest.value.favorited) notifyFavoriteSaved(guest.value.count);
+    return guest.value;
+  }
+
+  const list = await getFavorites();
+  const exists = list.some(f => f.menuName === item.menuName);
+  if (exists) {
+    await requestJson('/api/user/favorites', {
+      method: 'DELETE',
+      body: { menuName: item.menuName },
+      timeoutMs: WRITE_TIMEOUT_MS,
+    });
+  } else {
+    await requestJson('/api/user/favorites', { method: 'POST', body: item, timeoutMs: WRITE_TIMEOUT_MS });
+  }
+  return { favorited: !exists, count: list.length + (exists ? -1 : 1) };
+};
 
 // --- 기피 태그 ---
 
@@ -173,16 +188,17 @@ export const getAvoidTags = async (): Promise<string[]> => {
   return parseAvoidTags(data.avoidTags);
 };
 
-export const setAvoidTags = (tags: string[]): Promise<string[]> =>
-  withGuestLock(async () => {
-    const clean = parseAvoidTags(tags);
-    if (await isGuest()) {
-      await AsyncStorage.setItem(GUEST_KEYS.avoidTags, clean.join(','));
-      return clean;
-    }
-    const data = await requestJson('/api/user/avoid-tags', { method: 'PUT', body: { avoidTags: clean.join(',') } });
-    return parseAvoidTags(data.avoidTags);
+export const setAvoidTags = async (tags: string[]): Promise<string[]> => {
+  const clean = parseAvoidTags(tags);
+  const guest = await whenGuest(() => AsyncStorage.setItem(GUEST_KEYS.avoidTags, clean.join(',')));
+  if (guest) return clean;
+  const data = await requestJson('/api/user/avoid-tags', {
+    method: 'PUT',
+    body: { avoidTags: clean.join(',') },
+    timeoutMs: WRITE_TIMEOUT_MS,
   });
+  return parseAvoidTags(data.avoidTags);
+};
 
 // --- 통계 ---
 
