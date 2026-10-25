@@ -1,0 +1,10 @@
+# CodeRabbit 설정
+# https://docs.coderabbit.ai/getting-started/yaml-configuration
+language: "ko-KR"
+
+reviews:
+  auto_review:
+    enabled: true
+    # 기본 브랜치(main) 외의 브랜치로 가는 PR도 자동 리뷰 (스택 PR 포함)
+    base_branches:
+      - ".*"
