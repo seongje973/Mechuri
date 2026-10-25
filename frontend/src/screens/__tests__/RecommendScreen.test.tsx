@@ -632,6 +632,29 @@ describe('RecommendScreen', () => {
     it('위치를 확인하지 못하면 강남역 기준이라고 알려 준다', async () => {
       await reachReveal();
       expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
+      expect(restaurantCalls().at(-1)![0]).toContain('x=127.0276197&y=37.497942');
+    });
+
+    it('다시 시작할 때 위치 권한이 없으면 예전 좌표를 버리고 강남역 기준으로 찾는다', async () => {
+      const Location = jest.requireMock('expo-location');
+      Location.requestForegroundPermissionsAsync.mockImplementationOnce(async () => ({ status: 'granted' }));
+      Location.getCurrentPositionAsync.mockImplementationOnce(async () => ({ coords: { latitude: 35.1, longitude: 129.0 } }));
+      jest.requireMock('../../api/client').apiFetch.mockClear();
+      await reachReveal();
+      expect(restaurantCalls()[0][0]).toContain('x=129&y=35.1');
+      await act(async () => {
+        fireEvent.press(screen.getByText('다시 추리 풀기 🔄'));
+      });
+      await act(async () => {
+        fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
+      });
+      for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
+        await act(async () => {
+          fireEvent.press(screen.getByText('👍 예'));
+        });
+      }
+      expect(restaurantCalls().at(-1)![0]).toContain('x=127.0276197&y=37.497942');
+      expect(screen.getByText('현재 위치를 확인하지 못해 강남역 기준으로 찾았어요')).toBeTruthy();
     });
 
     it('강남역 기준으로 찾은 뒤에 GPS가 잡혀도 목록 제목은 검색한 기준을 따른다', async () => {

@@ -124,7 +124,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [userCoords, setUserCoords] = useState<{ latitude: number, longitude: number } | null>(null);
   // 추천 시작은 기피 태그를 기다린 뒤 좌표를 읽는다. 그사이 잡힌 GPS를 놓치지 않게 최신 값을 따로 둔다
   const userCoordsRef = useRef<{ latitude: number, longitude: number } | null>(null);
-  const updateUserCoords = (coords: { latitude: number, longitude: number }) => {
+  const updateUserCoords = (coords: { latitude: number, longitude: number } | null) => {
     userCoordsRef.current = coords;
     setUserCoords(coords);
   };
@@ -196,9 +196,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
         });
+      } else {
+        // 권한이 없으면 예전 좌표로 "내 주변"이라고 찾지 않는다
+        updateUserCoords(null);
       }
     } catch (e) {
       console.log('GPS Refresh Failed');
+      updateUserCoords(null);
     }
   };
 
