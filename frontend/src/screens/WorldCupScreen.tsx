@@ -167,9 +167,15 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
         restaurantName: '이상형 월드컵 우승',
         category: winner.category
       });
-      setWinnerFavorited(await isFavorite(winner.name));
     } catch (e) {
       console.log("Failed to save WorldCup winner history", e);
+    }
+
+    // 기록 저장이 실패해도 하트는 실제 최애 상태를 보여 준다
+    try {
+      setWinnerFavorited(await isFavorite(winner.name));
+    } catch (e) {
+      console.log("Failed to load WorldCup winner favorite state", e);
     }
   };
 
