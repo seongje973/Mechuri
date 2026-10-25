@@ -6,12 +6,16 @@ const Participant = require('../models/Participant');
 const toSessionParticipant = (p) => ({ id: p.id, nickname: p.nickname, answers: p.answers, leftAt: p.leftAt });
 
 const roomStore = {
-  /** 소켓 접속 토큰으로 참가자와 그 방을 찾는다 */
+  /** 소켓 접속 토큰으로 참가자와 그 방을 찾는다. 나가기를 누른 사람은 다시 들어올 수 없다. */
   async findByToken(token) {
     if (typeof token !== 'string' || !token) return null;
     const participant = await Participant.findOne({ where: { token }, include: Room });
-    if (!participant) return null;
-    return { participantId: participant.id, room: participant.Room.get({ plain: true }) };
+    if (!participant || participant.leftAt) return null;
+    return {
+      participantId: participant.id,
+      participant: toSessionParticipant(participant),
+      room: participant.Room.get({ plain: true })
+    };
   },
 
   async loadParticipants(roomId) {

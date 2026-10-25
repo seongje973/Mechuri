@@ -98,6 +98,10 @@ const attachRealtime = (httpServer, { store = require('./roomStore').roomStore, 
       if (!found) throw new RoomError('INVALID_TOKEN', '방 참가 정보가 없어요. 코드로 다시 참가해 주세요.');
       if (isRoomExpired(found.room)) throw new RoomError('ROOM_EXPIRED', '만료된 방이에요. 새 방을 만들어 주세요.');
       const s = await registry.open(found.room);
+      // HTTP 참가와 방 불러오기가 겹치면 세션이 이 사람을 모를 수 있다
+      s.addParticipant(found.participant);
+      // connect가 실패하면(만료 등) 소켓 상태를 바꾸지 않는다
+      const { previousSocketId, state } = s.connect(found.participantId, socket.id);
       // 같은 소켓으로 다른 방에 들어가면 이전 방에서는 끊긴 것으로 친다
       if (membership && membership.participantId !== found.participantId) {
         const old = registry.get(membership.roomId);
@@ -106,7 +110,6 @@ const attachRealtime = (httpServer, { store = require('./roomStore').roomStore, 
       }
       membership = { roomId: s.id, participantId: found.participantId, code: s.code };
       socket.join(channelOf(s.code));
-      const { previousSocketId, state } = s.connect(found.participantId, socket.id);
       if (previousSocketId) io.sockets.sockets.get(previousSocketId)?.disconnect(true);
       return { participantId: found.participantId, state };
     }));
