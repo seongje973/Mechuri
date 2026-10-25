@@ -1,4 +1,5 @@
 const { pickQuestionOrder } = require('./questionOrder');
+const { GroupVote } = require('./groupVote');
 
 // 같이 정하기 방 하나의 진행 상태. 소켓과 DB를 모르고, 바깥에서 받은
 // emit(이벤트를 방 전체에 보냄)과 store(DB 저장)만 부른다. 그래서 테스트에서 시계를 바꿔 끼울 수 있다.
@@ -12,6 +13,8 @@ const DEFAULT_OPTIONS = {
   // 연결이 끊긴 뒤 이 시간 안에 돌아오면 그대로 이어서 한다 (US-30).
   // 넘기면 대기실에서는 방에서 빠지고, 진행 중에는 그 사람을 기다리지 않는다.
   disconnectGraceMs: 30 * 1000,
+  // 동점 투표 (US-28). 이 시간 안에 안 낸 표는 빼고 센다
+  voteTimeoutMs: 60 * 1000,
   minParticipantsToStart: 2,
   random: Math.random
 };
@@ -20,6 +23,13 @@ const systemClock = {
   now: () => Date.now(),
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (handle) => clearTimeout(handle)
+};
+
+// Participant.avoidTags는 쉼표 구분 문자열. 메모리에서는 배열로 둔다.
+const readAvoidTags = (value) => {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string') return value.split(',').map((t) => t.trim()).filter(Boolean);
+  return [];
 };
 
 class RoomError extends Error {
@@ -60,6 +70,8 @@ class RoomSession {
 
     this.questionDeadline = null;
     this.questionTimer = null;
+    this.vote = null;
+    this.voteTimer = null;
     this.expiryTimer = this.clock.setTimeout(() => this.expire(), Math.max(0, this.expiresAt - this.clock.now()));
 
     const host = this.participants.get(this.hostId);
@@ -72,6 +84,7 @@ class RoomSession {
     const member = {
       id: p.id,
       nickname: p.nickname,
+      avoidTags: readAvoidTags(p.avoidTags),
       answers: Array.isArray(p.answers) ? [...p.answers] : [],
       left: Boolean(p.leftAt),
       connected: false,
@@ -161,6 +174,7 @@ class RoomSession {
     if (this.hostId === member.id) this._handOffHost();
     this._broadcastState();
     if (this.status === 'playing') this._advanceIfEveryoneAnswered();
+    this._decideIfEveryoneVoted();
   }
 
   /** 스스로 나가기 */
@@ -178,6 +192,7 @@ class RoomSession {
     if (this.hostId === member.id) this._handOffHost();
     this._broadcastState();
     if (this.status === 'playing') this._advanceIfEveryoneAnswered();
+    this._decideIfEveryoneVoted();
   }
 
   _removeMember(member) {
@@ -330,7 +345,73 @@ class RoomSession {
   }
 
   answersByParticipant() {
-    return [...this.participants.values()].map((m) => ({ participantId: m.id, nickname: m.nickname, left: m.left, answers: m.answers }));
+    return [...this.participants.values()].map((m) => ({
+      participantId: m.id,
+      nickname: m.nickname,
+      left: m.left,
+      avoidTags: m.avoidTags,
+      answers: m.answers
+    }));
+  }
+
+  // ---- 동점 투표 (US-28) ----
+
+  /**
+   * 그룹 점수는 앱이 계산하고(모두 같은 답과 같은 메뉴 데이터라 결과가 같다), 1·2위가 비슷하면
+   * 아무나 상위 후보를 보낸다. 먼저 온 것으로 열고, 이미 열렸으면 그 투표를 그대로 돌려준다.
+   * 서버는 메뉴 데이터를 몰라서 후보의 형식만 확인하고, 실제 상위 메뉴인지는 확인하지 않는다
+   * (친구끼리 쓰는 방이라 참가자를 믿는다).
+   */
+  openVote(participantId, candidates) {
+    this._assertOpen();
+    this._member(participantId);
+    if (this.status !== 'finished') throw new RoomError('NOT_FINISHED', '질문이 다 끝난 뒤에 투표할 수 있어요.');
+    if (this.vote) return this._voteView();
+    const names = GroupVote.readCandidates(candidates);
+    if (!names) throw new RoomError('INVALID_CANDIDATES', '투표 후보는 서로 다른 메뉴 2~4개여야 해요.');
+    this.vote = new GroupVote({ candidates: names, deadline: this.clock.now() + this.options.voteTimeoutMs });
+    this.voteTimer = this.clock.setTimeout(() => this._onVoteTimeout(), this.options.voteTimeoutMs);
+    this.emit('vote:started', this._voteView());
+    return this._voteView();
+  }
+
+  castVote(participantId, menu) {
+    this._assertOpen();
+    this._member(participantId);
+    if (!this.vote) throw new RoomError('NO_VOTE', '진행 중인 투표가 없어요.');
+    if (this.vote.winner) throw new RoomError('VOTE_CLOSED', '이미 끝난 투표예요.');
+    if (!this.vote.candidates.includes(menu)) throw new RoomError('INVALID_VOTE', '후보에 없는 메뉴예요.');
+    if (this.vote.hasVoted(participantId)) throw new RoomError('ALREADY_VOTED', '이미 투표했어요.');
+    this.vote.cast(participantId, menu);
+    this.emit('vote:cast', { participantId, votedIds: this._voteView().votedIds });
+    this._decideIfEveryoneVoted();
+  }
+
+  _decideIfEveryoneVoted() {
+    if (!this.vote || this.vote.winner) return;
+    const awaited = this._awaitedMembers();
+    if (awaited.length > 0 && awaited.every((m) => this.vote.hasVoted(m.id))) this._decideVote();
+  }
+
+  _onVoteTimeout() {
+    this.voteTimer = null;
+    if (this.vote && !this.vote.winner) this._decideVote();
+  }
+
+  _decideVote() {
+    this._clearVoteTimer();
+    this.vote.decide(this.activeMembers().map((m) => m.id), this.options.random);
+    this.emit('vote:result', this._voteView());
+    this._broadcastState();
+  }
+
+  _voteView() {
+    return this.vote ? this.vote.view(this.activeMembers().map((m) => m.id)) : null;
+  }
+
+  _clearVoteTimer() {
+    if (this.voteTimer) this.clock.clearTimeout(this.voteTimer);
+    this.voteTimer = null;
   }
 
   _clearQuestionTimer() {
@@ -352,6 +433,7 @@ class RoomSession {
   /** 타이머를 모두 정리 (만료나 서버 종료 때) */
   close() {
     this._clearQuestionTimer();
+    this._clearVoteTimer();
     if (this.expiryTimer) this.clock.clearTimeout(this.expiryTimer);
     this.expiryTimer = null;
     for (const m of this.participants.values()) this._clearGraceTimer(m);
@@ -372,7 +454,10 @@ class RoomSession {
         connected: m.connected,
         away: m.away
       })),
-      question: this._questionPayload()
+      question: this._questionPayload(),
+      // 끝난 뒤 다시 들어온 사람도 같은 결과를 계산할 수 있게
+      result: this.status === 'finished' ? { questionIds: this.questionIds, answers: this.answersByParticipant() } : null,
+      vote: this._voteView()
     };
   }
 

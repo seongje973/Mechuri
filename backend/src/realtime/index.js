@@ -5,9 +5,11 @@ const { isRoomExpired } = require('../models/Room');
 // Socket.IO 연결. 방마다 RoomSession 하나를 메모리에 두고 (서버 한 대 기준),
 // 처음 접속할 때 DB에서 불러온다.
 //
-// 앱 → 서버: join { code, token }, ready { ready }, start, answer { questionId, answer }, next, leave
+// 앱 → 서버: join { code, token }, ready { ready }, start, answer { questionId, answer }, next, leave,
+//   vote:open { candidates }, vote { menu }
 //   모두 ack(콜백)로 { ok: true, ... } 또는 { ok: false, error, message }를 돌려준다.
-// 서버 → 앱: room:state, question, answered, host:changed, room:finished, room:expired
+// 서버 → 앱: room:state, question, answered, host:changed, room:finished, room:expired,
+//   vote:started, vote:cast, vote:result
 
 const channelOf = (code) => `room:${code}`;
 
@@ -128,6 +130,14 @@ const attachRealtime = (httpServer, { store = require('./roomStore').roomStore, 
 
     socket.on('next', handle(async () => {
       session().next(membership.participantId);
+    }));
+
+    socket.on('vote:open', handle(async ({ candidates }) => ({
+      vote: session().openVote(membership.participantId, candidates)
+    })));
+
+    socket.on('vote', handle(async ({ menu }) => {
+      session().castVote(membership.participantId, menu);
     }));
 
     socket.on('leave', handle(async () => {

@@ -3,7 +3,7 @@ const Participant = require('../models/Participant');
 
 // RoomSession이 쓰는 DB 저장소. 테스트에서는 같은 모양의 메모리 저장소로 바꿔 끼운다.
 
-const toSessionParticipant = (p) => ({ id: p.id, nickname: p.nickname, answers: p.answers, leftAt: p.leftAt });
+const toSessionParticipant = (p) => ({ id: p.id, nickname: p.nickname, avoidTags: p.avoidTags, answers: p.answers, leftAt: p.leftAt });
 
 const roomStore = {
   /** 소켓 접속 토큰으로 참가자와 그 방을 찾는다. 나가기를 누른 사람은 다시 들어올 수 없다. */

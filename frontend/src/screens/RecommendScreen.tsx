@@ -102,6 +102,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const weatherRef = useRef<RecommendContext['weather']>(null);
   // 추천 한 판마다 올라가는 번호. 이전 판의 늦은 날씨 응답이 새 판을 덮지 않게 한다
   const weatherRoundRef = useRef(0);
+  // 시작 요청마다 올라간다. 기피 태그를 읽는 사이 다시 시작했거나 초기화했으면 이전 요청은 버린다
+  const startRequestRef = useRef(0);
+  // 질문 화면에 떠 있는 판을 시작한 요청 번호. startRequestRef보다 작으면 새 시작이 진행 중이다
+  const activeStartRequestRef = useRef(0);
   const weatherPromiseRef = useRef<Promise<void> | null>(null);
   // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
@@ -170,6 +174,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 아키네이터 인트로 셋업 및 초기화
   const resetGame = () => {
+    startRequestRef.current += 1;
     eatRoundRef.current += 1;
     setExcludedCategories([]);
     setSession(null);
@@ -214,6 +219,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 아키네이터 게임 기동
   const startAkinator = async (excluded: string[] = excludedCategories, auto = false) => {
+    const startRequest = ++startRequestRef.current;
     // 사전 제외 장르 + 마이페이지에서 설정한 기피 성분(avoidTags)은 시작 전에 후보에서 뺀다
     let avoidTags: string[] = [];
     try {
@@ -221,13 +227,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     } catch (e) {
       console.log("Failed to load user avoid tags on setup", e);
     }
+    if (startRequestRef.current !== startRequest) return;
     const first = toRecommendSession(createScoreSession(MENU_DATA, { avoidTags, excludedCategories: excluded }));
 
     if (first.candidates.length === 0) {
+      // 새 판을 못 열었으니 지금 판을 계속 진행할 수 있게 진행 중 표시를 거둔다
+      if (startRequestRef.current === startRequest) startRequestRef.current = activeStartRequestRef.current;
       Alert.alert("경고 ⚠️", "제외한 장르와 기피 재료 때문에 남은 메뉴가 없어요. 조건을 조금 풀어 주세요.");
       return;
     }
 
+    activeStartRequestRef.current = startRequest;
     eatRoundRef.current += 1;
     weatherRoundRef.current += 1;
     weatherRef.current = null;
@@ -346,6 +356,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   const finishAkinator = async (finalSession: RecommendSession) => {
+    // 새 시작 요청은 기피 태그를 읽는 동안 판 번호를 아직 올리지 않았으므로 요청 번호도 본다.
+    // 새 판이 열리는 중이면 지금 판의 결과는 계산하지 않는다
+    const startRequest = activeStartRequestRef.current;
+    if (startRequestRef.current !== startRequest) return;
     const token = ++finishTokenRef.current;
     setCurrentQuestion(null);
     // 추천을 시작할 때마다 올라가는 판 번호
@@ -360,7 +374,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
       const personal = await loadAdjustments();
       // 날씨·보정값을 기다리는 사이 새 추천을 시작했거나, 답을 되돌렸거나, 화면을 떠났으면 이전 결과를 띄우지 않는다
-      if (token !== finishTokenRef.current || weatherRoundRef.current !== round || analyticsSessionRef.current !== analyticsSession) return;
+      if (
+        token !== finishTokenRef.current ||
+        weatherRoundRef.current !== round ||
+        analyticsSessionRef.current !== analyticsSession ||
+        startRequestRef.current !== startRequest
+      ) return;
       adj = mergeAdjustments(personal, context.adjustments);
       reasons = context.reasons;
       setAdjustments(adj);

@@ -16,6 +16,7 @@ import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
 import { addHistory, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA } from '../constants/menuData';
+import { colors, fonts } from '../theme';
 
 const { width } = Dimensions.get('window');
 
@@ -261,7 +262,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
           
           <View style={styles.introOptionContainer}>
             <TouchableOpacity 
-              style={[styles.introButton, { borderColor: '#fbbf24' }]} 
+              style={[styles.introButton, { borderColor: colors.feather }]} 
               onPress={() => startWorldCup(16)}
             >
               <Text style={styles.introButtonEmoji}>🔥</Text>
@@ -270,7 +271,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.introButton, { borderColor: 'rgba(255,255,255,0.1)' }]} 
+              style={[styles.introButton, { borderColor: colors.line }]} 
               onPress={() => startWorldCup(8)}
             >
               <Text style={styles.introButtonEmoji}>⚡</Text>
@@ -397,7 +398,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
             {loadingRestaurants ? (
               <View style={styles.loadingWrapper}>
-                <ActivityIndicator size="large" color="#fbbf24" />
+                <ActivityIndicator size="large" color={colors.feather} />
                 <Text style={styles.loadingText}>메추리가 실제 식당 정보를 검색하는 중...</Text>
               </View>
             ) : restaurantsError ? (
@@ -454,7 +455,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#fbbf24" />
+        <ActivityIndicator size="large" color={colors.feather} />
       </View>
     </SafeAreaView>
   );
@@ -463,7 +464,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#1c1917', // Warm Dark Stone
+    backgroundColor: colors.cream,
   },
   container: {
     flex: 1,
@@ -475,18 +476,20 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
   introEmoji: {
+    fontFamily: fonts.body,
     fontSize: 60,
     marginBottom: 16,
   },
   introTitle: {
+    fontFamily: fonts.bold,
     fontSize: 26,
-    fontWeight: '900',
-    color: '#fbbf24', // Gold
+    color: colors.feather,
     marginBottom: 12,
   },
   introSubtitle: {
+    fontFamily: fonts.body,
     fontSize: 14,
-    color: '#a8a29e',
+    color: colors.muted,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -495,7 +498,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   introButton: {
-    backgroundColor: 'rgba(41, 37, 36, 0.8)',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     borderWidth: 1.5,
     padding: 20,
@@ -504,17 +507,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   introButtonEmoji: {
+    fontFamily: fonts.body,
     fontSize: 28,
     marginBottom: 6,
   },
   introButtonTitle: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 16,
-    fontWeight: '800',
     marginBottom: 4,
   },
   introButtonSub: {
-    color: '#78716c',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11,
   },
 
@@ -525,28 +530,28 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   roundTitle: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 22,
-    fontWeight: '900',
     textAlign: 'center',
     marginBottom: 4,
   },
   matchProgress: {
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 13,
-    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 10,
   },
   progressBarBackground: {
     height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surface,
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     borderRadius: 3,
   },
   cardsContainer: {
@@ -557,10 +562,10 @@ const styles = StyleSheet.create({
   },
   foodCard: {
     flex: 0.46,
-    backgroundColor: 'rgba(41, 37, 36, 0.9)',
+    backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.1)',
+    borderColor: colors.feather,
     padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -575,26 +580,28 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   cardCategory: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    backgroundColor: colors.surface,
+    color: colors.muted,
     fontSize: 10,
-    fontWeight: '800',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   cardEmoji: {
+    fontFamily: fonts.body,
     fontSize: 50,
     marginVertical: 8,
   },
   cardName: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 20,
-    fontWeight: '900',
     marginBottom: 6,
   },
   cardDesc: {
-    color: '#78716c',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
@@ -602,17 +609,17 @@ const styles = StyleSheet.create({
   },
   selectBadge: {
     marginTop: 12,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    borderColor: '#fbbf24',
+    backgroundColor: colors.yolkSoft,
+    borderColor: colors.feather,
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 5,
   },
   selectBadgeText: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 11,
-    fontWeight: '800',
   },
   vsContainer: {
     alignItems: 'center',
@@ -621,11 +628,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   vsText: {
-    color: '#78716c',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 14,
-    fontWeight: '900',
     letterSpacing: 2,
-    backgroundColor: '#1c1917',
+    backgroundColor: colors.surface,
     paddingHorizontal: 16,
   },
   abandonButton: {
@@ -634,9 +641,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   abandonText: {
-    color: '#57534e',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     fontSize: 12,
-    fontWeight: '600',
     textDecorationLine: 'underline',
   },
 
@@ -653,24 +660,24 @@ const styles = StyleSheet.create({
     marginVertical: 14,
   },
   winnerSubtitle: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 14,
-    fontWeight: '800',
     marginBottom: 4,
   },
   winnerMainTitle: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 22,
-    fontWeight: '900',
   },
   winnerCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.9)',
+    backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.2)',
+    borderColor: colors.feather,
     padding: 20,
     marginBottom: 24,
-    shadowColor: '#fbbf24',
+    shadowColor: colors.yolk,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -682,6 +689,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   winnerEmoji: {
+    fontFamily: fonts.body,
     fontSize: 48,
   },
   winnerTitleRow: {
@@ -690,36 +698,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   winnerMenuName: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 22,
-    fontWeight: '900',
   },
   favBtn: {
     padding: 4,
   },
   winnerCategory: {
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 12,
-    fontWeight: '700',
     marginTop: 2,
   },
   winnerDesc: {
-    color: '#d6d3d1',
+    fontFamily: fonts.body,
+    color: colors.ink,
     fontSize: 13,
     lineHeight: 20,
     marginBottom: 16,
   },
   baeminBtn: {
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   baeminBtnText: {
-    color: '#1c1917',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 14,
-    fontWeight: '900',
   },
 
   // restaurants
@@ -727,9 +736,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   restaurantsTitle: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 15,
-    fontWeight: '800',
     marginBottom: 14,
   },
   loadingWrapper: {
@@ -737,17 +746,18 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   loadingText: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 12,
     marginTop: 10,
   },
   restaurantCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.4)',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: colors.line,
   },
   resRow: {
     flexDirection: 'row',
@@ -760,45 +770,47 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   resName: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 14,
-    fontWeight: '800',
     maxWidth: '70%',
   },
   resTypeBadge: {
-    backgroundColor: 'rgba(251, 191, 36, 0.08)',
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    backgroundColor: colors.yolkSoft,
+    color: colors.feather,
     fontSize: 9,
-    fontWeight: '800',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
     marginLeft: 6,
   },
   resMeta: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11,
     marginBottom: 2,
   },
   resAddress: {
-    color: '#57534e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11,
   },
   navBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: colors.line,
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   navBtnText: {
-    color: '#d6d3d1',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 11,
-    fontWeight: '800',
   },
   emptyWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
@@ -810,19 +822,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#fbbf24',
+    borderColor: colors.feather,
   },
   reloadBtnText: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 13,
-    fontWeight: '700',
   },
   emptyText: {
-    color: '#78716c',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 12,
   },
   retryBtn: {
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 16,
     paddingVertical: 14,
@@ -831,8 +844,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   retryBtnText: {
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 13,
-    fontWeight: '800',
   },
 });
