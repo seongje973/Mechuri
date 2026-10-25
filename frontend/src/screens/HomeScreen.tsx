@@ -25,13 +25,6 @@ interface RankingItem {
   count: number;
 }
 
-export const FALLBACK_RANKING: RankingItem[] = [
-  { rank: 1, menuName: '삼겹살', emoji: '🥩', category: '한식', count: 18 },
-  { rank: 2, menuName: '짜장면', emoji: '🍜', category: '중식', count: 14 },
-  { rank: 3, menuName: '돈까스', emoji: '🍛', category: '일식', count: 11 },
-  { rank: 4, menuName: '초밥', emoji: '🍣', category: '일식', count: 9 },
-  { rank: 5, menuName: '피자', emoji: '🍕', category: '양식', count: 6 }
-];
 
 // 시간대별 인사. 마스코트 추리는 반말로 말한다.
 export const getGreeting = (hour: number = new Date().getHours()) => {
@@ -62,22 +55,26 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
   const insets = useSafeAreaInsets();
   const [rankingList, setRankingList] = useState<RankingItem[]>([]);
   const [loadingRanking, setLoadingRanking] = useState<boolean>(true);
+  const [rankingFailed, setRankingFailed] = useState<boolean>(false);
 
-  // 랭킹 정보 조회
+  // 랭킹 정보 조회. 실제 기록만 보여 주고, 못 불러오면 지어낸 숫자 대신 그 사실을 알린다
   const fetchRanking = async () => {
+    // 응답 본문을 다 읽을 때까지 8초로 묶는다. 그래야 로딩이 끝나고 새로고침 버튼이 다시 켜진다
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       setLoadingRanking(true);
-      const response = await apiFetch(`/api/restaurants/ranking`);
-      if (response.ok) {
-        const data = await response.json();
-        setRankingList(data.ranking || []);
-      } else {
-        setRankingList(FALLBACK_RANKING);
-      }
+      setRankingFailed(false);
+      const response = await apiFetch(`/api/restaurants/ranking`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setRankingList(data.ranking || []);
     } catch (e) {
-      console.log('⚠️ Failed to fetch ranking from server, applying client fallback');
-      setRankingList(FALLBACK_RANKING);
+      console.log('⚠️ Failed to fetch ranking from server');
+      setRankingList([]);
+      setRankingFailed(true);
     } finally {
+      clearTimeout(timeoutId);
       setLoadingRanking(false);
     }
   };
@@ -159,7 +156,7 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
         {/* 보조 영역: 인기 랭킹 */}
         <View style={styles.rankingHeaderRow}>
           <Text style={styles.sectionTitleInline}>요즘 많이 고른 메뉴</Text>
-          <TouchableOpacity onPress={fetchRanking} style={styles.refreshBtn}>
+          <TouchableOpacity onPress={fetchRanking} disabled={loadingRanking} style={styles.refreshBtn}>
             <Text style={styles.refreshBtnText}>새로고침</Text>
           </TouchableOpacity>
         </View>
@@ -169,6 +166,10 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
               <ActivityIndicator size="small" color={colors.yolkDeep} />
               <Text style={styles.rankingLoadingText}>랭킹을 불러오는 중이에요</Text>
             </View>
+          ) : rankingList.length === 0 ? (
+            <Text style={styles.rankingEmptyText}>
+              {rankingFailed ? '랭킹을 불러오지 못했어요. 잠시 후 새로고침해 주세요.' : '아직 데이터가 없어요. 첫 기록을 남겨 보세요!'}
+            </Text>
           ) : (
             rankingList.map((item, idx) => (
               <View
@@ -359,6 +360,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.muted,
     marginLeft: spacing.sm,
+  },
+  rankingEmptyText: {
+    ...typography.caption,
+    color: colors.muted,
+    textAlign: 'center',
+    paddingVertical: 24,
   },
   rankingRow: {
     flexDirection: 'row',
