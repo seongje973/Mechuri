@@ -1313,7 +1313,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: '#78716c',
+    color: '#a8a29e',
     fontSize: 11.5,
   },
   emptyActions: {
