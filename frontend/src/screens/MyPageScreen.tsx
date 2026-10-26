@@ -15,16 +15,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch, saveSession } from '../api/client';
 import { devKakaoLogin, openKakaoLogin } from '../api/kakaoLogin';
 import TasteSheet from '../components/TasteSheet';
+import { Ionicons } from '@expo/vector-icons';
+import QuailBadge from '../components/QuailBadge';
 import {
+  HistoryEntry,
   UserStats,
   clearHistories,
   deleteAccount,
+  getAvoidTags,
   getFavorites,
   getHistories,
+  getPreferences,
   getStats
 } from '../storage/userData';
 import { requestLoginPrompt } from '../storage/loginPrompt';
-import { colors, fonts, radii } from '../theme';
+import { EMPTY_PREFERENCES, TastePreferences } from '../engine/preferences';
+import { buildMealReport, reportInsight } from '../engine/mealReport';
+import { colors, fonts, layout, radii } from '../theme';
 
 interface MyPageScreenProps {
   navigation: any;
@@ -33,6 +40,12 @@ interface MyPageScreenProps {
   onLoginSuccess: () => void;
   onLogout: () => void;
 }
+
+const SPICY_LABEL: Record<NonNullable<TastePreferences['spicy']>, string> = {
+  mild: '안 매운 맛',
+  normal: '보통 매운맛',
+  hot: '매운맛 좋아요',
+};
 
 /**
  * 게스트와 로그인 사용자가 같은 화면을 쓴다. 기록은 storage/userData가 기기 또는 서버에서 읽는다.
@@ -59,15 +72,25 @@ export default function MyPageScreen({
   const [nickname, setNickname] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
+  // 식사 리포트와 취향 카드. 하나가 실패해도 나머지는 보여 준다
+  const [histories, setHistories] = useState<HistoryEntry[]>([]);
+  const [avoidTags, setAvoidTagsState] = useState<string[]>([]);
+  const [prefs, setPrefs] = useState<TastePreferences>(EMPTY_PREFERENCES);
+
   const loadUserData = useCallback(async () => {
     setLoading(true);
-    try {
-      setStats(await getStats());
-    } catch (error) {
-      console.log('❌ Error loading MyPage stats:', error);
-    } finally {
-      setLoading(false);
-    }
+    const [statsResult, historyResult, tagResult, prefResult] = await Promise.allSettled([
+      getStats(),
+      getHistories(),
+      getAvoidTags(),
+      getPreferences(),
+    ]);
+    if (statsResult.status === 'fulfilled') setStats(statsResult.value);
+    else console.log('❌ Error loading MyPage stats:', statsResult.reason);
+    if (historyResult.status === 'fulfilled') setHistories(historyResult.value);
+    if (tagResult.status === 'fulfilled') setAvoidTagsState(tagResult.value);
+    if (prefResult.status === 'fulfilled') setPrefs(prefResult.value ?? EMPTY_PREFERENCES);
+    setLoading(false);
   }, []);
 
   // 탭에 들어올 때마다 새로 읽는다 (다른 화면에서 기록·최애가 늘었을 수 있음)
@@ -235,21 +258,19 @@ export default function MyPageScreen({
     }
   };
 
-  const renderGuestLoginCard = () => (
-    <View style={styles.authCard}>
-      <Text style={styles.authCardTitle}>기록을 카카오에 저장하기 💛</Text>
-      <Text style={styles.authCardDesc}>
-        지금 기록은 이 폰에만 있어요. 로그인하면 아래 기록이 계정으로 옮겨져서 다른 폰에서도 볼 수 있어요.
-      </Text>
-
+  const renderGuestLogin = () => (
+    <View style={styles.guestLogin}>
       <TouchableOpacity
         style={styles.kakaoBtn}
         onPress={handleRealKakaoLogin}
         disabled={authLoading}
         activeOpacity={0.85}
       >
-        <Text style={styles.kakaoBtnText}>💛 카카오 계정으로 로그인</Text>
+        <Text style={styles.kakaoBtnText}>카카오로 기록 저장하기</Text>
       </TouchableOpacity>
+      <Text style={styles.guestLoginDesc}>
+        로그인하면 이 폰의 기록이 계정으로 옮겨져서 다른 폰에서도 볼 수 있어요.
+      </Text>
 
       {/* 개발 빌드에서만 보임, 서버도 운영에서는 막음 */}
       {__DEV__ && (
@@ -328,7 +349,7 @@ export default function MyPageScreen({
             disabled={authLoading}
           >
             {authLoading ? (
-              <ActivityIndicator color={colors.ink} />
+              <ActivityIndicator color={colors.onBrand} />
             ) : (
               <Text style={styles.emailSubmitText}>
                 {isLoginMode ? "미식가로 입장하기" : "메추리 가입하기"}
@@ -351,6 +372,15 @@ export default function MyPageScreen({
     </View>
   );
 
+  const report = buildMealReport(histories);
+  const reportMax = Math.max(1, ...report.categories.map(c => c.count));
+  const hasTaste = avoidTags.length > 0 || prefs.likedCuisines.length > 0 || prefs.spicy !== null;
+
+  const listRows: { label: string; value: string; icon: React.ComponentProps<typeof Ionicons>['name']; onPress: () => void }[] = [
+    { label: '최애 메뉴', value: `${stats.favoritesCount}개`, icon: 'heart-outline', onPress: handlePressFavorite },
+    { label: '식사 기록', value: `${stats.eatenCount}끼`, icon: 'calendar-outline', onPress: handlePressHistory },
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
@@ -358,58 +388,105 @@ export default function MyPageScreen({
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Text style={styles.screenTitle}>내 정보</Text>
 
-          {/* Profile Header Card */}
-          <View style={styles.profileCard}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{isGuest ? '🐣' : '😋'}</Text>
+          {/* 프로필 */}
+          <View style={styles.card}>
+            <View style={styles.profileRow}>
+              <QuailBadge size={56} />
+              <View style={styles.profileInfo}>
+                <Text style={styles.userName}>{isGuest ? '게스트 미식가' : `${userProfile.nickname} 님`}</Text>
+                <Text style={styles.userEmail}>{isGuest ? '기록은 이 폰에 저장돼요' : userProfile.email}</Text>
+              </View>
+              {loading && <ActivityIndicator color={colors.brand} />}
             </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.userName}>{isGuest ? '게스트 미식가' : `${userProfile.nickname} 님`}</Text>
-              <Text style={styles.userEmail}>{isGuest ? '기록은 이 폰에 저장돼요' : userProfile.email}</Text>
-            </View>
-            {loading && <ActivityIndicator color={colors.yolkDeep} />}
+            {isGuest && renderGuestLogin()}
           </View>
 
-          {isGuest && renderGuestLoginCard()}
-
-          {/* Stat Badges */}
-          <View style={styles.statsRow}>
-            <TouchableOpacity style={styles.statBox} onPress={handlePressHistory}>
-              <Text style={styles.statNumber}>{stats.eatenCount}</Text>
-              <Text style={styles.statLabel}>먹은 기록 📅</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.statBox} onPress={handlePressFavorite}>
-              <Text style={styles.statNumber}>{stats.favoritesCount}</Text>
-              <Text style={styles.statLabel}>선호 음식 ❤️</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.statBox} onPress={handlePressAvoid}>
-              <Text style={styles.statNumber}>{stats.avoidCount}</Text>
-              <Text style={styles.statLabel}>알레르기·기피 🚫</Text>
-            </TouchableOpacity>
+          {/* 이번 달 식사 리포트 */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>{report.month}월 식사 리포트</Text>
+              <Text style={styles.cardMeta}>{report.total}끼</Text>
+            </View>
+            {report.categories.map(c => (
+              <View key={c.name} style={styles.barRow}>
+                <Text style={styles.barLabel}>{c.name}</Text>
+                <View style={styles.barTrack}>
+                  <View style={[styles.barFill, { width: `${(c.count / reportMax) * 100}%` }]} />
+                </View>
+                <Text style={styles.barCount}>{c.count}</Text>
+              </View>
+            ))}
+            <View style={styles.insight}>
+              <Text style={styles.insightText}>{reportInsight(report)}</Text>
+            </View>
           </View>
 
-          {/* Quick Menu Settings */}
-          <Text style={styles.sectionTitle}>⚙️ 개인 맞춤 설정</Text>
+          {/* 내 취향 설정 */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>내 취향 설정</Text>
+              <TouchableOpacity onPress={handlePressAvoid} style={styles.editBtn} accessibilityRole="button">
+                <Text style={styles.editText}>수정</Text>
+              </TouchableOpacity>
+            </View>
+            {hasTaste ? (
+              <>
+                {avoidTags.length > 0 && (
+                  <View style={styles.tasteGroup}>
+                    <Text style={styles.tasteLabel}>못 먹어요</Text>
+                    <View style={styles.chipWrap}>
+                      {avoidTags.map(t => (
+                        <View key={t} style={[styles.chip, styles.chipAvoid]}>
+                          <Text style={[styles.chipText, styles.chipAvoidText]}>{t}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+                {(prefs.likedCuisines.length > 0 || prefs.spicy) && (
+                  <View style={styles.tasteGroup}>
+                    <Text style={styles.tasteLabel}>좋아해요</Text>
+                    <View style={styles.chipWrap}>
+                      {prefs.likedCuisines.map(c => (
+                        <View key={c} style={[styles.chip, styles.chipLike]}>
+                          <Text style={[styles.chipText, styles.chipLikeText]}>{c}</Text>
+                        </View>
+                      ))}
+                      {prefs.spicy && (
+                        <View style={[styles.chip, styles.chipLike]}>
+                          <Text style={[styles.chipText, styles.chipLikeText]}>{SPICY_LABEL[prefs.spicy]}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity onPress={handlePressAvoid} activeOpacity={0.7}>
+                <Text style={styles.tasteEmpty}>알레르기, 안 먹는 음식, 좋아하는 음식을 알려 주면 추천이 더 정확해져요.</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-          <TouchableOpacity style={styles.menuItem} onPress={handlePressFavorite}>
-            <Text style={styles.menuText}>❤️ 나의 최애 음식 모아보기</Text>
-            <Text style={styles.arrow}>➔</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={handlePressAvoid}>
-            <Text style={styles.menuText}>🚫 알레르기·안 먹는 음식·좋아하는 음식 설정</Text>
-            <Text style={styles.arrow}>➔</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={handlePressHistory}>
-            <Text style={styles.menuText}>📅 내가 먹고 추천받았던 식단 히스토리</Text>
-            <Text style={styles.arrow}>➔</Text>
-          </TouchableOpacity>
+          {/* 최애 메뉴 · 식사 기록 */}
+          <View style={styles.listCard}>
+            {listRows.map(row => (
+              <TouchableOpacity key={row.label} style={styles.listRow} onPress={row.onPress} activeOpacity={0.7}>
+                <View style={styles.listIcon}>
+                  <Ionicons name={row.icon} size={20} color={colors.subtle} />
+                </View>
+                <Text style={styles.listTitle}>{row.label}</Text>
+                <Text style={styles.listValue}>{row.value}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {!isGuest && (
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-              <Text style={styles.logoutBtnText}>🚪 로그아웃</Text>
+              <Text style={styles.logoutBtnText}>로그아웃</Text>
             </TouchableOpacity>
           )}
 
@@ -430,99 +507,89 @@ export default function MyPageScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
   },
   container: {
-    padding: 24,
-    paddingTop: 16,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: 8,
+    paddingBottom: 24,
+    gap: 12,
   },
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  screenTitle: {
+    fontFamily: fonts.display,
+    fontSize: 22,
+    lineHeight: 30,
+    letterSpacing: -0.5,
+    color: colors.ink,
+    paddingLeft: 4,
+    paddingVertical: 7,
+  },
+  card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: 18,
-    marginBottom: 16,
+    padding: 20,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.full,
-    backgroundColor: colors.shell,
+  profileRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  avatarText: {
-    fontFamily: fonts.body,
-    fontSize: 28,
+    gap: 14,
   },
   profileInfo: {
     flex: 1,
   },
   userName: {
-    fontFamily: fonts.display,
-    fontSize: 19,
+    fontFamily: fonts.heavy,
+    fontSize: 18,
+    lineHeight: 25,
     color: colors.ink,
   },
   userEmail: {
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.muted,
-    marginTop: 3,
+    marginTop: 2,
   },
-  authCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    marginBottom: 16,
+  guestLogin: {
+    marginTop: 16,
   },
-  authCardTitle: {
-    fontFamily: fonts.display,
-    fontSize: 17,
-    color: colors.ink,
-    marginBottom: 8,
-  },
-  authCardDesc: {
+  guestLoginDesc: {
     fontFamily: fonts.body,
-    fontSize: 13.5,
+    fontSize: 12.5,
+    lineHeight: 18,
     color: colors.muted,
-    lineHeight: 20,
-    marginBottom: 16,
+    marginTop: 8,
+    textAlign: 'center',
   },
   kakaoBtn: {
     backgroundColor: colors.kakao,
     borderRadius: radii.md,
-    borderBottomWidth: 4,
-    borderBottomColor: colors.yolkDeep,
-    paddingVertical: 14,
+    minHeight: 50,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   kakaoBtnText: {
     fontFamily: fonts.bold,
-    color: colors.ink,
+    color: colors.kakaoText,
     fontSize: 15,
   },
   devBypassBtn: {
-    marginTop: 12,
+    marginTop: 10,
     alignItems: 'center',
   },
   devBypassText: {
     fontFamily: fonts.body,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 12.5,
     textDecorationLine: 'underline',
   },
   accordionHeader: {
-    marginTop: 16,
-    paddingTop: 14,
+    marginTop: 14,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.line,
     alignItems: 'center',
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
   },
   accordionTitle: {
     fontFamily: fonts.medium,
@@ -530,7 +597,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   emailFormContent: {
-    marginTop: 14,
+    marginTop: 10,
   },
   formTitle: {
     fontFamily: fonts.bold,
@@ -549,27 +616,24 @@ const styles = StyleSheet.create({
   },
   input: {
     fontFamily: fonts.body,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.fill,
     borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.line,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 13 : 10,
     color: colors.ink,
     fontSize: 14.5,
   },
   emailSubmitBtn: {
-    backgroundColor: colors.yolk,
+    backgroundColor: colors.brand,
     borderRadius: radii.md,
-    borderBottomWidth: 4,
-    borderBottomColor: colors.yolkDeep,
-    paddingVertical: 14,
+    minHeight: 50,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 6,
   },
   emailSubmitText: {
     fontFamily: fonts.bold,
-    color: colors.ink,
+    color: colors.onBrand,
     fontSize: 15,
   },
   modeSwitchBtn: {
@@ -578,81 +642,169 @@ const styles = StyleSheet.create({
   },
   modeSwitchText: {
     fontFamily: fonts.body,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 12.5,
   },
-  statsRow: {
+  cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderBottomWidth: 4,
-    paddingVertical: 16,
     alignItems: 'center',
-    marginHorizontal: 4,
-  },
-  statNumber: {
-    fontFamily: fonts.display,
-    fontSize: 24,
-    color: colors.yolkDeep,
-  },
-  statLabel: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.ink,
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  menuItem: {
+  cardTitle: {
+    fontFamily: fonts.heavy,
+    fontSize: 17,
+    lineHeight: 24,
+    color: colors.ink,
+  },
+  cardMeta: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.muted,
+  },
+  barRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    gap: 10,
     marginBottom: 10,
   },
-  menuText: {
-    fontFamily: fonts.medium,
-    fontSize: 14.5,
-    color: colors.ink,
-    flex: 1,
+  barLabel: {
+    width: 44,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.subtle,
   },
-  arrow: {
-    fontFamily: fonts.body,
+  barTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.fill,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 5,
+    backgroundColor: colors.brand,
+  },
+  barCount: {
+    width: 22,
+    textAlign: 'right',
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  insight: {
+    backgroundColor: colors.brandSoft,
+    borderRadius: radii.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 4,
+  },
+  insightText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.brandText,
+  },
+  editBtn: {
+    minHeight: layout.minTouch,
+    minWidth: layout.minTouch,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginVertical: -10,
+  },
+  editText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    color: colors.quail,
-    marginLeft: 8,
+    color: colors.brandText,
+  },
+  tasteGroup: {
+    marginBottom: 12,
+  },
+  tasteLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: colors.muted,
+    marginBottom: 8,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  chip: {
+    borderRadius: radii.full,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  chipText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  chipAvoid: {
+    backgroundColor: colors.chiliSoft,
+  },
+  chipAvoidText: {
+    color: colors.chiliText,
+  },
+  chipLike: {
+    backgroundColor: colors.brandSoft,
+  },
+  chipLikeText: {
+    color: colors.brandText,
+  },
+  tasteEmpty: {
+    fontFamily: fonts.body,
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: colors.muted,
+  },
+  listCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingVertical: 6,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    minHeight: 56,
+  },
+  listIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.fill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listTitle: {
+    flex: 1,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  listValue: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.muted,
   },
   logoutBtn: {
-    marginTop: 18,
+    marginTop: 8,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.chili,
-    paddingVertical: 14,
+    backgroundColor: colors.surface,
+    minHeight: 50,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   logoutBtnText: {
     fontFamily: fonts.bold,
-    color: colors.chili,
+    color: colors.subtle,
     fontSize: 14.5,
   },
   deleteAccountBtn: {
-    marginTop: 14,
     alignSelf: 'center',
     padding: 6,
   },
@@ -667,7 +819,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.muted,
     fontSize: 11.5,
-    marginTop: 24,
-    marginBottom: 12,
+    marginTop: 8,
   },
 });

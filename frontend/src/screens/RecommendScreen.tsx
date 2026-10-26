@@ -18,7 +18,9 @@ import { apiFetch } from '../api/client';
 import { addHistory, getAvoidTags, getFavorites, getHistories, getPreferences, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
-import { colors, fonts } from '../theme';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, fonts, layout, radii } from '../theme';
+import QuailBadge from '../components/QuailBadge';
 import { openDelivery } from '../utils/openDelivery';
 import { shareResult } from '../utils/shareResult';
 import { AcceptAction, newSessionId, track } from '../analytics/events';
@@ -28,7 +30,7 @@ const { width } = Dimensions.get('window');
 const CUISINE_EMOJI: Record<Cuisine, string> = { 한식: '🇰🇷', 중식: '🇨🇳', 일식: '🇯🇵', 양식: '🍕', 분식: '🍢', 아시안: '🍜' };
 
 import { Question, QUESTIONS } from '../constants/akinatorQuestions';
-import { createScoreSession } from '../engine/scoreEngine';
+import { createScoreSession, rankCandidates } from '../engine/scoreEngine';
 import {
   RecommendResult,
   RecommendSession,
@@ -47,10 +49,10 @@ import { EMPTY_PREFERENCES, preferenceAdjustments } from '../engine/preferences'
 
 
 const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
-  { answer: 'yes', label: '👍 예' },
-  { answer: 'probably', label: '🙂 아마도' },
-  { answer: 'dontcare', label: '🤷 상관없음' },
-  { answer: 'no', label: '👎 아니오' }
+  { answer: 'yes', label: '응' },
+  { answer: 'probably', label: '아마도' },
+  { answer: 'dontcare', label: '상관없어' },
+  { answer: 'no', label: '아니' }
 ];
 
 // /api/restaurants 응답 (backend/src/routes/restaurant.js). 평점은 주지 않고, type은 있을 때만 온다
@@ -124,6 +126,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 지금 묻는 질문 번호 (1부터)
   const questionNumber = (session?.answers.length ?? 0) + 1;
   const questionLimit = session?.questionLimit ?? 7;
+
+  // 질문 화면 아래 카드: 지금까지 고른 조건(응·아마도는 yes 문구, 아니는 no 문구)과 점수 상위 3개
+  const pickedConditions = (session?.answers ?? []).flatMap(({ questionId, answer }) => {
+    const q = QUESTIONS.find(item => item.id === questionId);
+    if (!q || answer === 'dontcare') return [];
+    return [answer === 'no' ? q.reason.no : q.reason.yes];
+  });
+  const leaders = session && session.answers.length > 0 ? rankCandidates(session).slice(0, 3) : [];
+  const leaderMin = session ? Math.min(...session.candidates.map(item => session.scores[item.name] ?? 0)) : 0;
+  const leaderSpan = leaders.length > 0 ? leaders[0].score - leaderMin : 0;
+  const leaderWidth = (score: number) => `${Math.round((leaderSpan > 0 ? 0.25 + 0.75 * ((score - leaderMin) / leaderSpan) : 1) * 100)}%` as const;
   const isRetry = (session?.rejected.length ?? 0) > 0;
 
   // GPS 위치 및 백엔드 통신용 상태값
@@ -612,41 +625,73 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       {gameState === 'questioning' && currentQuestion && (
         // 질문이 바뀌면 다시 그려서 스크롤을 맨 위로 되돌린다
         <ScrollView key={questionNumber} contentContainerStyle={styles.quizContainer} showsVerticalScrollIndicator={false}>
-          {/* Header Progress */}
-          <View style={styles.progressContainer}>
+          <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressText}>질문 {questionNumber} / {questionLimit}</Text>
               <Text style={styles.poolCountText}>후보 메뉴 {session?.candidates.length ?? 0}개</Text>
             </View>
             <View style={styles.progressBarBackground}>
-              <View 
+              <View
                 style={[
-                  styles.progressBarFill, 
+                  styles.progressBarFill,
                   { width: `${Math.min(questionNumber / questionLimit, 1) * 100}%` }
-                ]} 
+                ]}
               />
             </View>
           </View>
 
-          {/* Question Text */}
           <View style={styles.questionCard}>
-            <Text style={styles.questionIcon}>🐣</Text>
+            <View style={styles.questionMeta}>
+              <QuailBadge size={44} />
+              <Text style={styles.questionMetaText}>추리의 {questionNumber}번째 질문</Text>
+            </View>
             <Text style={styles.questionText}>{currentQuestion.text}</Text>
+
+            {/* 답변 4개: 엄지로 누르기 쉽게 2 x 2. 응만 테마색, 나머지는 흰 버튼 */}
+            <View style={styles.answerGrid}>
+              {ANSWER_BUTTONS.map(({ answer, label }) => (
+                <TouchableOpacity
+                  key={answer}
+                  style={[styles.answerCell, answer === 'yes' ? styles.answerPrimary : styles.answerOutline]}
+                  onPress={() => handleAnswer(answer)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.btnAnswerText, answer === 'yes' && styles.answerPrimaryText]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
-          {/* 답변 4개: 엄지로 누르기 쉽게 2 x 2 */}
-          <View style={styles.answerGrid}>
-            {ANSWER_BUTTONS.map(({ answer, label }) => (
-              <TouchableOpacity
-                key={answer}
-                style={[styles.answerCell, styles[`answer_${answer}`]]}
-                onPress={() => handleAnswer(answer)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.btnAnswerText, styles[`answerText_${answer}`]]}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {pickedConditions.length > 0 && (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>지금까지 고른 조건</Text>
+              <View style={styles.conditionRow}>
+                {pickedConditions.map((label, i) => (
+                  <View key={`${label}-${i}`} style={styles.conditionChip}>
+                    <Text style={styles.conditionChipText}>{label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {leaders.length > 0 && (
+            <View style={styles.infoCard}>
+              <View style={styles.infoHeader}>
+                <Text style={styles.infoTitle}>유력 후보</Text>
+                <Text style={styles.infoSub}>실시간 순위</Text>
+              </View>
+              {leaders.map((r, i) => (
+                <View key={r.item.name} style={styles.leaderRow}>
+                  <Text style={[styles.leaderRank, i === 0 && styles.leaderRankTop]}>{i + 1}</Text>
+                  <Text style={styles.leaderName} numberOfLines={1}>{r.item.name}</Text>
+                  <View style={styles.leaderTrack}>
+                    <View style={[styles.leaderFill, i > 0 && styles.leaderFillSub, { width: leaderWidth(r.score) }]} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           {history.length > 0 && (
             <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
@@ -687,60 +732,69 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           {results[0] && (
             <Animated.View
               style={[
-                styles.revealHero,
+                styles.revealCard,
                 { opacity: revealAnim, transform: [{ scale: revealAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }
               ]}
             >
-              <Text style={styles.revealLead}>{isRetry ? '그렇다면 이 메뉴는…' : '당신이 생각한 메뉴는…'}</Text>
-              <Text style={styles.revealEmoji}>{results[0].item.emoji}</Text>
-              <Text style={styles.revealName} testID="reveal-name">{results[0].item.name}!</Text>
-              <View style={styles.reasonRow}>
-                {results[0].reasons.map(reason => (
-                  <View key={reason} style={styles.reasonChip}>
-                    <Text style={styles.reasonChipText}>{reason}</Text>
-                  </View>
-                ))}
+              <View style={styles.revealImage}>
+                <Text style={styles.revealEmoji}>{results[0].item.emoji}</Text>
               </View>
+              <View style={styles.revealBody}>
+                {!!session && session.answers.length > 0 && (
+                  <View style={styles.revealBadge}>
+                    <Text style={styles.revealBadgeText}>질문 {session.answers.length}개로 찾았어요</Text>
+                  </View>
+                )}
+                <Text style={styles.revealLead}>{isRetry ? '그렇다면 이 메뉴는…' : '당신이 생각한 메뉴는…'}</Text>
+                <Text style={styles.revealName} testID="reveal-name">{results[0].item.name}!</Text>
+                <View style={styles.reasonRow}>
+                  {results[0].reasons.map(reason => (
+                    <View key={reason} style={styles.reasonChip}>
+                      <Text style={styles.reasonChipText}>{reason}</Text>
+                    </View>
+                  ))}
+                </View>
 
-              {/* 결과에서 바로 실행 (US-20) */}
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handleNearby(results[0].item)}>
-                  <Text style={styles.actionIcon}>📍</Text>
-                  <Text style={styles.actionLabel}>근처 식당</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenBaemin(results[0].item.name)}>
-                  <Text style={styles.actionIcon}>🛵</Text>
-                  <Text style={styles.actionLabel}>배달</Text>
-                </TouchableOpacity>
+                {/* 결과에서 바로 실행 (US-20): 먹을래요가 주 버튼, 근처 식당·배달은 그 아래 */}
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionPrimary, eatenMenus.includes(results[0].item.name) && styles.actionDone]}
+                  style={[styles.eatButton, eatenMenus.includes(results[0].item.name) && styles.eatButtonDone]}
                   onPress={() => handleEatThis(results[0].item)}
                   disabled={eatenMenus.includes(results[0].item.name)}
                 >
-                  <Text style={styles.actionIcon}>😋</Text>
-                  <Text style={[styles.actionLabel, styles.actionPrimaryLabel]}>
+                  <Text style={[styles.eatButtonText, eatenMenus.includes(results[0].item.name) && styles.eatButtonTextDone]}>
                     {eatenMenus.includes(results[0].item.name) ? '맛있게 드세요!' : '이거 먹을래요'}
                   </Text>
                 </TouchableOpacity>
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => handleNearby(results[0].item)}>
+                    <Ionicons name="location-outline" size={18} color={colors.ink} />
+                    <Text style={styles.actionLabel}>근처 식당</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenBaemin(results[0].item.name)}>
+                    <Ionicons name="bicycle-outline" size={18} color={colors.ink} />
+                    <Text style={styles.actionLabel}>배달</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.linkRow}>
+                  <TouchableOpacity style={styles.shareButton} onPress={() => shareResult(results[0].item, results[0].reasons)}>
+                    <Text style={styles.shareButtonText}>친구에게 공유하기</Text>
+                  </TouchableOpacity>
+                  {history.length > 0 && (
+                    <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
+                      <Text style={styles.undoButtonText}>← 마지막 답 고치기</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {session && canReject(session) && (
+                    <TouchableOpacity style={styles.rejectButton} onPress={handleReject}>
+                      <Text style={styles.rejectButtonText}>
+                        {session.rejected.length >= 1 ? '또 틀렸어요, 월드컵으로 정할래요' : '틀렸어요 🙅'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-
-              <TouchableOpacity style={styles.shareButton} onPress={() => shareResult(results[0].item, results[0].reasons)}>
-                <Text style={styles.shareButtonText}>📤 친구에게 공유하기</Text>
-              </TouchableOpacity>
-
-              {history.length > 0 && (
-                <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
-                  <Text style={styles.undoButtonText}>← 마지막 답 고치기</Text>
-                </TouchableOpacity>
-              )}
-
-              {session && canReject(session) && (
-                <TouchableOpacity style={styles.rejectButton} onPress={handleReject}>
-                  <Text style={styles.rejectButtonText}>
-                    {session.rejected.length >= 1 ? '또 틀렸어요, 월드컵으로 정할래요' : '틀렸어요 🙅'}
-                  </Text>
-                </TouchableOpacity>
-              )}
             </Animated.View>
           )}
 
@@ -803,7 +857,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
               
               {loadingRestaurants ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={colors.feather} />
+                  <ActivityIndicator size="large" color={colors.brandText} />
                   <Text style={styles.loadingText}>메추리가 열심히 맛집을 수집하는 중...</Text>
                 </View>
               ) : (
@@ -864,219 +918,45 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   );
 }
 
+// 추리 질문·결과는 최종 조합안의 커머스형: 회색 바탕 위 흰 카드, 주 버튼만 테마색
+const card = {
+  backgroundColor: colors.surface,
+  borderRadius: 20,
+  paddingVertical: 16,
+  paddingHorizontal: 18,
+  marginBottom: 12,
+} as const;
+
 const styles = StyleSheet.create({
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 18,
-    alignSelf: 'stretch',
-  },
-  actionBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.yolkSoft,
-  },
-  actionPrimary: {
-    flex: 1.4,
-    backgroundColor: colors.yolk,
-    borderColor: colors.yolk,
-  },
-  actionDone: {
-    backgroundColor: colors.shell,
-    borderColor: colors.shell,
-  },
-  actionIcon: {
-    fontFamily: fonts.body,
-    fontSize: 20,
-    marginBottom: 2,
-  },
-  actionLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.ink,
-  },
-  actionPrimaryLabel: {
-    color: colors.ink,
-  },
-  undoButton: {
-    alignSelf: 'center',
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  undoButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.muted,
-  },
-  shareButton: {
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  shareButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.feather,
-  },
-  rejectButton: {
-    marginTop: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  rejectButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.muted,
-    textDecorationLine: 'underline',
-  },
-  answerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  answerCell: {
-    width: '48.5%',
-    minHeight: 64,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  answer_yes: { backgroundColor: colors.leaf },
-  answer_probably: { backgroundColor: colors.yolk },
-  answer_dontcare: { backgroundColor: colors.shell },
-  answer_no: { backgroundColor: colors.chili },
-  answerText_yes: { color: colors.surface },
-  answerText_probably: { color: colors.ink },
-  answerText_dontcare: { color: colors.ink },
-  answerText_no: { color: colors.surface },
-  skipButton: {
-    alignSelf: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.feather,
-    marginTop: 4,
-  },
-  skipButtonText: {
-    fontFamily: fonts.bold,
-    color: colors.feather,
-    fontSize: 14,
-  },
-  revealHero: {
-    alignItems: 'center',
-    backgroundColor: colors.yolkSoft,
-    borderColor: colors.feather,
-    borderWidth: 1,
-    borderRadius: 24,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    marginBottom: 18,
-  },
-  revealLead: {
-    fontFamily: fonts.body,
-    color: colors.ink,
-    fontSize: 15,
-    marginBottom: 8,
-  },
-  revealEmoji: {
-    fontFamily: fonts.body,
-    fontSize: 56,
-    marginBottom: 4,
-  },
-  revealName: {
-    fontFamily: fonts.bold,
-    color: colors.feather,
-    fontSize: 30,
-    marginBottom: 12,
-  },
-  reasonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  reasonChip: {
-    backgroundColor: colors.surface,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    margin: 3,
-  },
-  reasonChipText: {
-    fontFamily: fonts.medium,
-    color: colors.ink,
-    fontSize: 13,
-  },
-  altSection: {
-    marginBottom: 18,
-  },
-  altTitle: {
-    fontFamily: fonts.bold,
-    color: colors.muted,
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  altRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  altCard: {
-    width: '48.5%',
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
-    alignItems: 'center',
-  },
-  altEmoji: {
-    fontFamily: fonts.body,
-    fontSize: 30,
-    marginBottom: 4,
-  },
-  altName: {
-    fontFamily: fonts.bold,
-    color: colors.ink,
-    fontSize: 16,
-    marginBottom: 2,
-  },
-  altReason: {
-    fontFamily: fonts.body,
-    color: colors.muted,
-    fontSize: 12,
-  },
   safeArea: {
     flex: 1,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
   },
+
+  // 1. 시작 (피할 장르 고르기)
   introContainer: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 24,
     justifyContent: 'center',
   },
   introHeader: {
+    ...card,
     alignItems: 'center',
-    marginBottom: 20,
+    paddingVertical: 24,
   },
   introEmoji: {
-    fontSize: 48,
+    fontSize: 44,
     marginBottom: 8,
   },
   introTitle: {
     fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 34,
-    color: colors.feather,
-    marginBottom: 10,
+    fontSize: 24,
+    lineHeight: 32,
+    letterSpacing: -0.6,
+    color: colors.ink,
+    marginBottom: 8,
   },
   introSubtitle: {
     fontFamily: fonts.body,
@@ -1089,19 +969,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 4,
   },
   // 장르 6개를 3 x 2로: 작은 폰에서도 시작 버튼까지 한 화면에 들어오게
   genreButton: {
-    width: '31.5%',
+    width: '31.8%',
     backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderBottomWidth: 4,
+    borderColor: colors.surface,
+    borderWidth: 1.5,
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 4,
-    marginBottom: 10,
+    marginBottom: 8,
     alignItems: 'center',
   },
   genreButtonExcluded: {
@@ -1124,103 +1003,217 @@ const styles = StyleSheet.create({
   genreStatusText: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    color: colors.feather,
+    color: colors.muted,
   },
   genreStatusTextExcluded: {
     color: colors.chiliText,
   },
   startButton: {
-    backgroundColor: colors.yolk,
-    borderRadius: 16,
-    minHeight: 56,
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
+    minHeight: layout.buttonHeight,
     justifyContent: 'center',
     alignItems: 'center',
-    borderBottomWidth: 4,
-    borderBottomColor: colors.yolkDeep,
+    marginTop: 8,
   },
   startButtonText: {
-    fontFamily: fonts.bold,
-    color: colors.ink,
+    fontFamily: fonts.heavy,
+    color: colors.onBrand,
     fontSize: 17,
   },
 
-  // Akinator questioning styles
+  // 2. 질문
   quizContainer: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 24,
   },
-  progressContainer: {
-    marginBottom: 16,
+  progressCard: {
+    ...card,
+    paddingVertical: 14,
   },
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   progressText: {
+    fontFamily: fonts.heavy,
+    color: colors.brandText,
+    fontSize: 13,
+  },
+  poolCountText: {
     fontFamily: fonts.medium,
     color: colors.muted,
     fontSize: 13,
   },
-  poolCountText: {
-    fontFamily: fonts.bold,
-    color: colors.feather,
-    fontSize: 11,
-  },
   progressBarBackground: {
-    height: 8,
-    backgroundColor: colors.shell,
-    borderRadius: 4,
+    height: 6,
+    backgroundColor: colors.line,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: colors.yolk,
-    borderRadius: 4,
+    backgroundColor: colors.brand,
+    borderRadius: 3,
   },
   questionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    paddingVertical: 32,
+    ...card,
+    paddingVertical: 22,
     paddingHorizontal: 20,
-    borderWidth: 1,
-    borderBottomWidth: 4,
-    borderColor: colors.line,
-    marginTop: 8,
-    marginBottom: 20,
-    minHeight: 200,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  questionIcon: {
-    fontSize: 44,
-    marginBottom: 14,
+  questionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  questionMetaText: {
+    fontFamily: fonts.body,
+    color: colors.muted,
+    fontSize: 14,
   },
   questionText: {
     fontFamily: fonts.display,
     color: colors.ink,
-    fontSize: 22,
-    textAlign: 'center',
-    lineHeight: 30,
+    fontSize: 27,
+    lineHeight: 37,
+    letterSpacing: -0.8,
+    marginBottom: 18,
   },
-  btnAnswer: {
-    borderRadius: 16,
-    paddingVertical: 14,
+  answerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 8,
+  },
+  answerCell: {
+    width: '48.8%',
+    minHeight: 64,
+    borderRadius: 14,
     alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1.5,
+    justifyContent: 'center',
+  },
+  answerPrimary: {
+    backgroundColor: colors.brand,
+  },
+  answerOutline: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
   },
   btnAnswerText: {
-    fontFamily: fonts.display,
-    fontSize: 20,
+    fontFamily: fonts.heavy,
+    fontSize: 17,
     lineHeight: 24,
+    color: colors.ink,
+  },
+  answerPrimaryText: {
+    color: colors.onBrand,
+  },
+  infoCard: {
+    ...card,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  infoTitle: {
+    fontFamily: fonts.heavy,
+    color: colors.ink,
+    fontSize: 15,
+    marginBottom: 10,
+  },
+  infoSub: {
+    fontFamily: fonts.body,
+    color: colors.muted,
+    fontSize: 13,
+  },
+  conditionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  conditionChip: {
+    backgroundColor: colors.brandSoft,
+    borderRadius: radii.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  conditionChipText: {
+    fontFamily: fonts.bold,
+    color: colors.brandText,
+    fontSize: 13,
+  },
+  leaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  leaderRank: {
+    width: 18,
+    fontFamily: fonts.display,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  leaderRankTop: {
+    color: colors.brand,
+  },
+  leaderName: {
+    flex: 1,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  leaderTrack: {
+    width: 110,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.line,
+    overflow: 'hidden',
+  },
+  leaderFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.brand,
+  },
+  leaderFillSub: {
+    backgroundColor: colors.brandMid,
+  },
+  undoButton: {
+    alignSelf: 'center',
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  undoButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  skipButton: {
+    alignSelf: 'center',
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderRadius: radii.full,
+    backgroundColor: colors.surface,
+    marginTop: 4,
+  },
+  skipButtonText: {
+    fontFamily: fonts.bold,
+    color: colors.brandText,
+    fontSize: 14,
   },
   resetButton: {
-    paddingVertical: 10,
-    marginTop: 8,
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    marginTop: 4,
     alignSelf: 'center',
   },
   resetButtonText: {
@@ -1230,31 +1223,196 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
 
-  // Reveal screen styles
+  // 3. 결과
   scrollReveal: {
     flex: 1,
   },
   revealContainer: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 40,
   },
-  selectedDetailCard: {
+  revealCard: {
     backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 24,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  revealImage: {
+    height: 180,
+    backgroundColor: colors.brandSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  revealEmoji: {
+    fontFamily: fonts.body,
+    fontSize: 84,
+  },
+  revealBody: {
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+  },
+  revealBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.brand,
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  revealBadgeText: {
+    fontFamily: fonts.heavy,
+    color: colors.onBrand,
+    fontSize: 12,
+  },
+  revealLead: {
+    fontFamily: fonts.body,
+    color: colors.muted,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  revealName: {
+    fontFamily: fonts.display,
+    color: colors.ink,
+    fontSize: 32,
+    lineHeight: 42,
+    letterSpacing: -1,
+    marginBottom: 10,
+  },
+  reasonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 18,
+  },
+  reasonChip: {
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: colors.feather,
+    borderColor: colors.lineStrong,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  reasonChipText: {
+    fontFamily: fonts.medium,
+    color: colors.ink,
+    fontSize: 13,
+  },
+  eatButton: {
+    minHeight: layout.buttonHeight,
+    borderRadius: 14,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eatButtonDone: {
+    backgroundColor: colors.fill,
+  },
+  eatButtonText: {
+    fontFamily: fonts.heavy,
+    fontSize: 17,
+    color: colors.onBrand,
+  },
+  eatButtonTextDone: {
+    color: colors.ink,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+  },
+  actionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  shareButton: {
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  shareButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.brandText,
+  },
+  rejectButton: {
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  rejectButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.muted,
+    textDecorationLine: 'underline',
+  },
+  altSection: {
+    ...card,
+  },
+  altTitle: {
+    fontFamily: fonts.heavy,
+    color: colors.ink,
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  altRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  altCard: {
+    width: '48.5%',
+    backgroundColor: colors.fill,
+    borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
+  },
+  altEmoji: {
+    fontFamily: fonts.body,
+    fontSize: 30,
+    marginBottom: 4,
+  },
+  altName: {
+    fontFamily: fonts.heavy,
+    color: colors.ink,
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  altReason: {
+    fontFamily: fonts.body,
+    color: colors.muted,
+    fontSize: 12,
+  },
+  selectedDetailCard: {
+    ...card,
+    padding: 18,
   },
   detailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   detailEmoji: {
     fontFamily: fonts.body,
-    fontSize: 48,
-    marginRight: 14,
+    fontSize: 40,
+    marginRight: 12,
   },
   titleRow: {
     flexDirection: 'row',
@@ -1262,45 +1420,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   detailTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 20,
+    fontFamily: fonts.heavy,
+    fontSize: 18,
     color: colors.ink,
   },
   heartBtn: {
-    padding: 4,
+    width: layout.minTouch,
+    height: layout.minTouch,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   detailCategory: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.medium,
     color: colors.muted,
-    fontSize: 11.5,
+    fontSize: 12,
     marginTop: 2,
   },
   detailDesc: {
     fontFamily: fonts.body,
     color: colors.ink,
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 16,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 14,
   },
   baeminSearchBtn: {
-    backgroundColor: colors.yolk,
     borderRadius: 14,
-    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    minHeight: 48,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   baeminSearchText: {
     fontFamily: fonts.bold,
     color: colors.ink,
-    fontSize: 13,
+    fontSize: 14,
   },
   restaurantsSection: {
-    marginBottom: 24,
+    ...card,
+    paddingBottom: 8,
   },
   restaurantSectionTitle: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.heavy,
     color: colors.ink,
-    fontSize: 14.5,
-    marginBottom: 12,
+    fontSize: 16,
+    marginBottom: 6,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -1309,16 +1473,13 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: fonts.body,
     color: colors.muted,
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 8,
   },
   restaurantCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.line,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
   },
   resInfoRow: {
     flexDirection: 'row',
@@ -1333,53 +1494,56 @@ const styles = StyleSheet.create({
   resName: {
     fontFamily: fonts.bold,
     color: colors.ink,
-    fontSize: 13.5,
+    fontSize: 15,
     maxWidth: '70%',
   },
   resBadge: {
     fontFamily: fonts.bold,
-    backgroundColor: colors.yolkSoft,
-    color: colors.feather,
-    fontSize: 8.5,
+    backgroundColor: colors.fill,
+    color: colors.subtle,
+    fontSize: 11,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
     marginLeft: 6,
+    overflow: 'hidden',
   },
   resMeta: {
     fontFamily: fonts.body,
-    color: colors.muted,
-    fontSize: 10.5,
+    color: colors.subtle,
+    fontSize: 13,
     marginBottom: 2,
   },
   resAddress: {
     fontFamily: fonts.body,
     color: colors.muted,
-    fontSize: 10.5,
+    fontSize: 12,
   },
   navButton: {
     backgroundColor: colors.surface,
-    borderColor: colors.line,
+    borderColor: colors.lineStrong,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 8,
+    borderRadius: radii.sm,
+    minHeight: 40,
+    justifyContent: 'center',
     paddingHorizontal: 12,
   },
   navButtonText: {
     fontFamily: fonts.bold,
     color: colors.ink,
-    fontSize: 10.5,
+    fontSize: 13,
   },
   emptyContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: colors.fill,
+    borderRadius: 14,
+    padding: 18,
     alignItems: 'center',
+    marginBottom: 8,
   },
   emptyText: {
     fontFamily: fonts.body,
     color: colors.muted,
-    fontSize: 11.5,
+    fontSize: 13,
   },
   emptyActions: {
     flexDirection: 'row',
@@ -1387,35 +1551,35 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   emptyButton: {
-    paddingVertical: 8,
+    minHeight: 40,
+    justifyContent: 'center',
     paddingHorizontal: 14,
-    borderRadius: 12,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.feather,
+    borderColor: colors.lineStrong,
   },
   emptyButtonText: {
     fontFamily: fonts.bold,
-    color: colors.feather,
-    fontSize: 12,
+    color: colors.ink,
+    fontSize: 13,
   },
   restaurantHint: {
     fontFamily: fonts.body,
     color: colors.muted,
-    fontSize: 11,
-    marginTop: -6,
-    marginBottom: 10,
+    fontSize: 12,
+    marginBottom: 8,
   },
   retryButton: {
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingVertical: 14,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    minHeight: layout.buttonHeight,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
   },
   retryButtonText: {
     fontFamily: fonts.bold,
-    color: colors.muted,
-    fontSize: 13,
+    color: colors.ink,
+    fontSize: 15,
   },
 });

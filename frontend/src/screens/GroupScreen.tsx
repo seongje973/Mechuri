@@ -67,7 +67,7 @@ export default function GroupScreen({ navigation, route, userProfile }: Props) {
 
   let body: React.ReactNode;
   if (!loaded) {
-    body = <ActivityIndicator color={colors.feather} style={{ marginTop: 60 }} />;
+    body = <ActivityIndicator color={colors.brandText} style={{ marginTop: 60 }} />;
   } else if (!membership) {
     body = (
       <GroupEntry
@@ -83,7 +83,7 @@ export default function GroupScreen({ navigation, route, userProfile }: Props) {
   } else if (!room.state) {
     body = (
       <View style={{ alignItems: 'center', marginTop: 60 }}>
-        <ActivityIndicator color={colors.feather} />
+        <ActivityIndicator color={colors.brandText} />
         <Text style={gs.subtitle}>방 {membership.code}에 연결하는 중…</Text>
         <TouchableOpacity onPress={reset} style={{ marginTop: 20, padding: 8 }}>
           <Text style={{ color: colors.muted, textDecorationLine: 'underline' }}>그만두고 처음으로</Text>
@@ -110,8 +110,8 @@ export default function GroupScreen({ navigation, route, userProfile }: Props) {
   return (
     <View style={[gs.screen, { paddingTop: insets.top }]}>
       {membership && room.state && !room.connected ? (
-        <View style={{ backgroundColor: colors.shell, padding: 8 }}>
-          <Text style={{ textAlign: 'center', color: colors.feather, fontFamily: fonts.body, fontSize: 13 }}>연결이 끊겼어요. 다시 연결하는 중…</Text>
+        <View style={{ backgroundColor: colors.fill, padding: 8 }}>
+          <Text style={{ textAlign: 'center', color: colors.brandText, fontFamily: fonts.body, fontSize: 13 }}>연결이 끊겼어요. 다시 연결하는 중…</Text>
         </View>
       ) : null}
       <ScrollView contentContainerStyle={gs.scroll} keyboardShouldPersistTaps="handled">

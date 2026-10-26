@@ -1,34 +1,36 @@
 import { StyleSheet } from 'react-native';
-import { colors, fonts } from '../../theme';
+import { colors, fonts, layout, radii } from '../../theme';
 
-/** 같이 정하기 화면들이 함께 쓰는 스타일. 색과 글꼴은 src/theme 토큰을 쓴다 */
+/** 같이 정하기 화면들이 함께 쓰는 스타일. 홈과 같은 회색 바탕 + 흰 카드, 주 버튼만 테마색 */
 
 export const gs = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cream },
-  scroll: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 24, fontFamily: fonts.display, color: colors.ink },
-  subtitle: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 6, lineHeight: 20 },
-  card: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.line, padding: 16, marginTop: 16 },
-  label: { fontSize: 13, fontFamily: fonts.bold, color: colors.muted, marginBottom: 8 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  scroll: { padding: 16, paddingBottom: 40 },
+  title: { fontSize: 22, lineHeight: 30, letterSpacing: -0.5, fontFamily: fonts.display, color: colors.ink, paddingHorizontal: 4 },
+  subtitle: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 4, lineHeight: 20, paddingHorizontal: 4 },
+  card: { backgroundColor: colors.surface, borderRadius: radii.lg, padding: 20, marginTop: 12 },
+  label: { fontSize: 14, fontFamily: fonts.heavy, color: colors.ink, marginBottom: 10 },
   input: {
-    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.line,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink,
+    backgroundColor: colors.surface, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.lineStrong,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: colors.ink, fontFamily: fonts.body,
   },
   primary: {
-    backgroundColor: colors.yolk, borderRadius: 16, borderBottomWidth: 4, borderBottomColor: colors.yolkDeep,
-    paddingVertical: 14, alignItems: 'center', marginTop: 12,
+    backgroundColor: colors.brand, borderRadius: radii.md, minHeight: layout.buttonHeight,
+    justifyContent: 'center', alignItems: 'center', marginTop: 12, paddingHorizontal: 16,
   },
-  primaryText: { fontSize: 16, fontFamily: fonts.bold, color: colors.ink },
+  primaryText: { fontSize: 17, fontFamily: fonts.heavy, color: colors.onBrand },
   secondary: {
-    backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.line, borderBottomWidth: 4,
-    paddingVertical: 14, alignItems: 'center', marginTop: 12,
+    backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: 1, borderColor: colors.lineStrong,
+    minHeight: layout.buttonHeight, justifyContent: 'center', alignItems: 'center', marginTop: 12, paddingHorizontal: 16,
   },
   secondaryText: { fontSize: 16, fontFamily: fonts.bold, color: colors.ink },
   disabled: { opacity: 0.45 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 7 },
-  chipOn: { backgroundColor: colors.shell, borderColor: colors.quail },
-  chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.ink },
+  chip: { borderRadius: radii.full, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 7 },
+  chipOn: { backgroundColor: colors.brandSoft, borderColor: colors.brandSoft },
+  /** 못 먹는 재료로 고른 칩 */
+  chipAvoid: { backgroundColor: colors.chiliSoft, borderColor: colors.chili },
+  chipText: { fontFamily: fonts.medium, fontSize: 13, color: colors.ink },
   error: { color: colors.chili, fontFamily: fonts.body, fontSize: 13, marginTop: 10 },
-  mascot: { fontSize: 15, color: colors.feather, fontFamily: fonts.bold, marginTop: 12 },
+  mascot: { fontSize: 15, color: colors.brandText, fontFamily: fonts.bold, marginTop: 12 },
 });

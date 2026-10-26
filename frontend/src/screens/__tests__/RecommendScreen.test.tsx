@@ -44,7 +44,7 @@ describe('RecommendScreen', () => {
     // 결과가 나올 때까지 "예"만 누른다 (최대 7문항)
     for (let i = 0; i < 7 && !screen.queryByText('당신이 생각한 메뉴는…'); i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
+        fireEvent.press(screen.getByText('응'));
       });
     }
 
@@ -59,7 +59,7 @@ describe('RecommendScreen', () => {
     });
     for (let i = 0; i < 3; i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('🤷 상관없음'));
+        fireEvent.press(screen.getByText('상관없어'));
       });
     }
     await act(async () => {
@@ -93,7 +93,7 @@ describe('RecommendScreen', () => {
     });
     for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
+        fireEvent.press(screen.getByText('응'));
       });
     }
     return navigate;
@@ -113,7 +113,7 @@ describe('RecommendScreen', () => {
     });
     for (let i = 0; i < 5 && !screen.queryByText('그렇다면 이 메뉴는…'); i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
+        fireEvent.press(screen.getByText('응'));
       });
     }
     expect(screen.getByText('그렇다면 이 메뉴는…')).toBeTruthy();
@@ -163,7 +163,7 @@ describe('RecommendScreen', () => {
     });
     for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
+        fireEvent.press(screen.getByText('응'));
       });
     }
     const { addHistory } = jest.requireMock('../../storage/userData');
@@ -217,7 +217,7 @@ describe('RecommendScreen', () => {
     const firstQuestion = screen.getByText('질문 1 / 7');
     expect(firstQuestion).toBeTruthy();
     await act(async () => {
-      fireEvent.press(screen.getByText('🤷 상관없음'));
+      fireEvent.press(screen.getByText('상관없어'));
     });
     expect(screen.getByText('질문 2 / 7')).toBeTruthy();
     fireEvent.press(screen.getByText('← 이전 질문'));
@@ -235,10 +235,10 @@ describe('RecommendScreen', () => {
     fireEvent.press(screen.getByText('← 마지막 답 고치기'));
     expect(screen.queryByText(/메뉴는…/)).toBeNull();
     expect(screen.getByText(/^질문 \d+ \/ 7$/)).toBeTruthy();
-    expect(screen.getByText('👍 예')).toBeTruthy();
+    expect(screen.getByText('응')).toBeTruthy();
     // 고친 답은 같은 자리(index)의 답으로 다시 기록된다
     await act(async () => {
-      fireEvent.press(screen.getByText('👎 아니오'));
+      fireEvent.press(screen.getByText('아니'));
     });
     const after = answerEvents();
     expect(after[after.length - 1][1].payload.index).toBe(lastIndex);
@@ -303,9 +303,9 @@ describe('RecommendScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByText('추리 퀴즈 시작하기 ➔'));
     });
-    for (let i = 0; i < 10 && screen.queryByText('👍 예'); i++) {
+    for (let i = 0; i < 10 && screen.queryByText('응'); i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
+        fireEvent.press(screen.getByText('응'));
       });
     }
     track.mockClear();
@@ -340,7 +340,7 @@ describe('RecommendScreen', () => {
       fireEvent.press(screen.getByText('← 마지막 답 고치기'));
     });
     await act(async () => {
-      fireEvent.press(screen.getByText('👍 예'));
+      fireEvent.press(screen.getByText('응'));
     });
     await act(async () => {
       finishSave();
@@ -432,7 +432,7 @@ describe('RecommendScreen', () => {
     });
     for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
       await act(async () => {
-        fireEvent.press(screen.getByText('👍 예'));
+        fireEvent.press(screen.getByText('응'));
       });
     }
     await act(async () => {
@@ -564,7 +564,7 @@ describe('RecommendScreen', () => {
       });
       for (let i = 0; i < 3; i++) {
         await act(async () => {
-          fireEvent.press(screen.getByText('🤷 상관없음'));
+          fireEvent.press(screen.getByText('상관없어'));
         });
       }
       await act(async () => {
@@ -602,7 +602,7 @@ describe('RecommendScreen', () => {
       });
       for (let i = 0; i < 3; i++) {
         await act(async () => {
-          fireEvent.press(screen.getByText('🤷 상관없음'));
+          fireEvent.press(screen.getByText('상관없어'));
         });
       }
       getAvoidTags.mockImplementationOnce(() => new Promise(r => (tags = r)));
@@ -637,7 +637,7 @@ describe('RecommendScreen', () => {
       });
       for (let i = 0; i < 3; i++) {
         await act(async () => {
-          fireEvent.press(screen.getByText('🤷 상관없음'));
+          fireEvent.press(screen.getByText('상관없어'));
         });
       }
       await act(async () => {
@@ -675,7 +675,7 @@ describe('RecommendScreen', () => {
       });
       for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
         await act(async () => {
-          fireEvent.press(screen.getByText('👍 예'));
+          fireEvent.press(screen.getByText('응'));
         });
       }
       expect(await screen.findByText('당신이 생각한 메뉴는…')).toBeTruthy();
@@ -698,9 +698,9 @@ describe('RecommendScreen', () => {
       expect(weatherCalls()).toHaveLength(1);
       for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
         await act(async () => {
-          fireEvent.press(screen.getByText('👍 예'));
+          fireEvent.press(screen.getByText('응'));
         });
-        if (!screen.queryByText('👍 예')) break;
+        if (!screen.queryByText('응')) break;
       }
       expect(await screen.findByText('당신이 생각한 메뉴는…', {}, { timeout: 3000 })).toBeTruthy();
     });
@@ -765,7 +765,7 @@ describe('RecommendScreen', () => {
       });
       for (let i = 0; i < 10 && !screen.queryByText(/메뉴는…/); i++) {
         await act(async () => {
-          fireEvent.press(screen.getByText('👍 예'));
+          fireEvent.press(screen.getByText('응'));
         });
       }
       expect(restaurantCalls().at(-1)![0]).toContain('x=127.0276197&y=37.497942');
