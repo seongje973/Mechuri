@@ -610,7 +610,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
       {/* 2. 아키네이터 질문 구동 단계 */}
       {gameState === 'questioning' && currentQuestion && (
-        <ScrollView contentContainerStyle={styles.quizContainer} showsVerticalScrollIndicator={false}>
+        // 질문이 바뀌면 다시 그려서 스크롤을 맨 위로 되돌린다
+        <ScrollView key={questionNumber} contentContainerStyle={styles.quizContainer} showsVerticalScrollIndicator={false}>
           {/* Header Progress */}
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
