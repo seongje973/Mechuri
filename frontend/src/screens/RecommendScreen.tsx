@@ -18,6 +18,7 @@ import { apiFetch } from '../api/client';
 import { addHistory, getAvoidTags, getFavorites, getHistories, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
+import { colors, fonts } from '../theme';
 import { openDelivery } from '../utils/openDelivery';
 import { shareResult } from '../utils/shareResult';
 import { AcceptAction, newSessionId, track } from '../analytics/events';
@@ -631,7 +632,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
                 onPress={() => handleAnswer(answer)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.btnAnswerText}>{label}</Text>
+                <Text style={[styles.btnAnswerText, styles[`answerText_${answer}`]]}>{label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -791,7 +792,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
               
               {loadingRestaurants ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#fbbf24" />
+                  <ActivityIndicator size="large" color={colors.feather} />
                   <Text style={styles.loadingText}>메추리가 열심히 맛집을 수집하는 중...</Text>
                 </View>
               ) : (
@@ -864,30 +865,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderRadius: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#fde7c0',
+    borderColor: colors.yolkSoft,
   },
   actionPrimary: {
     flex: 1.4,
-    backgroundColor: '#F5A623',
-    borderColor: '#F5A623',
+    backgroundColor: colors.yolk,
+    borderColor: colors.yolk,
   },
   actionDone: {
-    backgroundColor: '#c9b48f',
-    borderColor: '#c9b48f',
+    backgroundColor: colors.shell,
+    borderColor: colors.shell,
   },
   actionIcon: {
+    fontFamily: fonts.body,
     fontSize: 20,
     marginBottom: 2,
   },
   actionLabel: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
-    color: '#3b2f1e',
+    color: colors.ink,
   },
   actionPrimaryLabel: {
-    color: '#ffffff',
+    color: colors.ink,
   },
   undoButton: {
     alignSelf: 'center',
@@ -896,9 +898,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   undoButtonText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#9a8a74',
+    color: colors.muted,
   },
   shareButton: {
     marginTop: 12,
@@ -906,9 +908,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   shareButtonText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#F5A623',
+    color: colors.feather,
   },
   rejectButton: {
     marginTop: 14,
@@ -916,9 +918,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   rejectButtonText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#9a8a74',
+    color: colors.muted,
     textDecorationLine: 'underline',
   },
   answerGrid: {
@@ -935,28 +937,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  answer_yes: { backgroundColor: '#16a34a' },
-  answer_probably: { backgroundColor: '#65a30d' },
-  answer_dontcare: { backgroundColor: '#57534e' },
-  answer_no: { backgroundColor: '#dc2626' },
+  answer_yes: { backgroundColor: colors.leaf },
+  answer_probably: { backgroundColor: colors.yolk },
+  answer_dontcare: { backgroundColor: colors.shell },
+  answer_no: { backgroundColor: colors.chili },
+  answerText_yes: { color: colors.surface },
+  answerText_probably: { color: colors.ink },
+  answerText_dontcare: { color: colors.ink },
+  answerText_no: { color: colors.surface },
   skipButton: {
     alignSelf: 'center',
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.5)',
+    borderColor: colors.feather,
     marginTop: 4,
   },
   skipButtonText: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 14,
-    fontWeight: '700',
   },
   revealHero: {
     alignItems: 'center',
-    backgroundColor: 'rgba(251, 191, 36, 0.08)',
-    borderColor: 'rgba(251, 191, 36, 0.35)',
+    backgroundColor: colors.yolkSoft,
+    borderColor: colors.feather,
     borderWidth: 1,
     borderRadius: 24,
     paddingVertical: 24,
@@ -964,18 +970,20 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   revealLead: {
-    color: '#d6d3d1',
+    fontFamily: fonts.body,
+    color: colors.ink,
     fontSize: 15,
     marginBottom: 8,
   },
   revealEmoji: {
+    fontFamily: fonts.body,
     fontSize: 56,
     marginBottom: 4,
   },
   revealName: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 30,
-    fontWeight: '800',
     marginBottom: 12,
   },
   reasonRow: {
@@ -984,24 +992,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reasonChip: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.surface,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 12,
     margin: 3,
   },
   reasonChipText: {
-    color: '#f5f5f4',
+    fontFamily: fonts.medium,
+    color: colors.ink,
     fontSize: 13,
-    fontWeight: '600',
   },
   altSection: {
     marginBottom: 18,
   },
   altTitle: {
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 14,
-    fontWeight: '700',
     marginBottom: 8,
   },
   altRow: {
@@ -1010,30 +1018,32 @@ const styles = StyleSheet.create({
   },
   altCard: {
     width: '48.5%',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 18,
     padding: 14,
     alignItems: 'center',
   },
   altEmoji: {
+    fontFamily: fonts.body,
     fontSize: 30,
     marginBottom: 4,
   },
   altName: {
-    color: '#f5f5f4',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 16,
-    fontWeight: '700',
     marginBottom: 2,
   },
   altReason: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 12,
   },
   safeArea: {
     flex: 1,
-    backgroundColor: '#1c1917', // Warm Dark Stone
+    backgroundColor: colors.cream,
   },
   introContainer: {
     flex: 1,
@@ -1045,18 +1055,20 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   introEmoji: {
+    fontFamily: fonts.body,
     fontSize: 54,
     marginBottom: 12,
   },
   introTitle: {
+    fontFamily: fonts.bold,
     fontSize: 24,
-    fontWeight: '900',
-    color: '#fbbf24',
+    color: colors.feather,
     marginBottom: 10,
   },
   introSubtitle: {
+    fontFamily: fonts.body,
     fontSize: 13,
-    color: '#a8a29e',
+    color: colors.muted,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -1068,8 +1080,8 @@ const styles = StyleSheet.create({
   },
   genreButton: {
     width: '48%',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 20,
     padding: 12,
@@ -1077,40 +1089,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   genreButtonExcluded: {
-    backgroundColor: 'rgba(239, 68, 68, 0.06)',
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: colors.chiliSoft,
+    borderColor: colors.chili,
   },
   genreEmoji: {
+    fontFamily: fonts.body,
     fontSize: 32,
     marginBottom: 8,
   },
   genreLabel: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 14,
-    fontWeight: '800',
     marginBottom: 4,
   },
   genreLabelExcluded: {
-    color: '#ef4444',
+    color: colors.chiliText,
   },
   genreStatusText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
-    color: '#fbbf24',
+    color: colors.feather,
   },
   genreStatusTextExcluded: {
-    color: '#ef4444',
+    color: colors.chiliText,
   },
   startButton: {
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     borderRadius: 18,
     paddingVertical: 15,
     alignItems: 'center',
   },
   startButtonText: {
-    color: '#1c1917',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 15,
-    fontWeight: '800',
   },
 
   // Akinator questioning styles
@@ -1129,43 +1142,44 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   progressText: {
-    color: '#a8a29e',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     fontSize: 13,
-    fontWeight: '600',
   },
   poolCountText: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 11,
-    fontWeight: '700',
   },
   progressBarBackground: {
     height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surface,
     borderRadius: 4,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     borderRadius: 4,
   },
   questionCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.8)',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     padding: 30,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.15)',
+    borderColor: colors.feather,
     marginVertical: 14,
     alignItems: 'center',
   },
   questionIcon: {
+    fontFamily: fonts.body,
     fontSize: 40,
     marginBottom: 12,
   },
   questionText: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 18,
-    fontWeight: '800',
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -1177,17 +1191,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   btnAnswerText: {
+    fontFamily: fonts.bold,
     fontSize: 14.5,
-    fontWeight: '800',
   },
   resetButton: {
     paddingVertical: 6,
     alignSelf: 'center',
   },
   resetButtonText: {
-    color: '#78716c',
+    fontFamily: fonts.medium,
+    color: colors.muted,
     fontSize: 12,
-    fontWeight: '600',
     textDecorationLine: 'underline',
   },
 
@@ -1200,12 +1214,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   selectedDetailCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.8)',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     padding: 20,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.15)',
+    borderColor: colors.feather,
   },
   detailHeader: {
     flexDirection: 'row',
@@ -1213,6 +1227,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   detailEmoji: {
+    fontFamily: fonts.body,
     fontSize: 48,
     marginRight: 14,
   },
@@ -1222,43 +1237,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   detailTitle: {
+    fontFamily: fonts.bold,
     fontSize: 20,
-    fontWeight: '900',
-    color: '#f8fafc',
+    color: colors.ink,
   },
   heartBtn: {
     padding: 4,
   },
   detailCategory: {
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 11.5,
-    fontWeight: '800',
     marginTop: 2,
   },
   detailDesc: {
-    color: '#d6d3d1',
+    fontFamily: fonts.body,
+    color: colors.ink,
     fontSize: 13,
     lineHeight: 20,
     marginBottom: 16,
   },
   baeminSearchBtn: {
-    backgroundColor: '#fbbf24',
+    backgroundColor: colors.yolk,
     borderRadius: 14,
     paddingVertical: 12,
     alignItems: 'center',
   },
   baeminSearchText: {
-    color: '#1c1917',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 13,
-    fontWeight: '800',
   },
   restaurantsSection: {
     marginBottom: 24,
   },
   restaurantSectionTitle: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 14.5,
-    fontWeight: '800',
     marginBottom: 12,
   },
   loadingContainer: {
@@ -1266,17 +1282,18 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   loadingText: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11,
     marginTop: 8,
   },
   restaurantCard: {
-    backgroundColor: 'rgba(41, 37, 36, 0.4)',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: colors.line,
   },
   resInfoRow: {
     flexDirection: 'row',
@@ -1289,51 +1306,54 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   resName: {
-    color: '#f8fafc',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 13.5,
-    fontWeight: '800',
     maxWidth: '70%',
   },
   resBadge: {
-    backgroundColor: 'rgba(251, 191, 36, 0.08)',
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    backgroundColor: colors.yolkSoft,
+    color: colors.feather,
     fontSize: 8.5,
-    fontWeight: '800',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
     marginLeft: 6,
   },
   resMeta: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 10.5,
     marginBottom: 2,
   },
   resAddress: {
-    color: '#57534e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 10.5,
   },
   navButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   navButtonText: {
-    color: '#d6d3d1',
+    fontFamily: fonts.bold,
+    color: colors.ink,
     fontSize: 10.5,
-    fontWeight: '800',
   },
   emptyContainer: {
-    backgroundColor: 'rgba(255,255,255,0.01)',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
   },
   emptyText: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11.5,
   },
   emptyActions: {
@@ -1346,21 +1366,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#fbbf24',
+    borderColor: colors.feather,
   },
   emptyButtonText: {
-    color: '#fbbf24',
+    fontFamily: fonts.bold,
+    color: colors.feather,
     fontSize: 12,
-    fontWeight: '700',
   },
   restaurantHint: {
-    color: '#a8a29e',
+    fontFamily: fonts.body,
+    color: colors.muted,
     fontSize: 11,
     marginTop: -6,
     marginBottom: 10,
   },
   retryButton: {
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 16,
     paddingVertical: 14,
@@ -1368,8 +1389,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   retryButtonText: {
-    color: '#a8a29e',
+    fontFamily: fonts.bold,
+    color: colors.muted,
     fontSize: 13,
-    fontWeight: '800',
-  }
+  },
 });
