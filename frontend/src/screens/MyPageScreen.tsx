@@ -3,7 +3,6 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   Alert,
@@ -12,6 +11,7 @@ import {
   TextInput,
   KeyboardAvoidingView
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch, saveSession } from '../api/client';
 import { devKakaoLogin, openKakaoLogin } from '../api/kakaoLogin';
 import TasteSheet from '../components/TasteSheet';
@@ -352,7 +352,7 @@ export default function MyPageScreen({
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 24,
-    paddingTop: Platform.OS === 'android' ? 40 : 24,
+    paddingTop: 16,
   },
   profileCard: {
     flexDirection: 'row',

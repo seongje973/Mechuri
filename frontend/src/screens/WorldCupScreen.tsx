@@ -4,7 +4,6 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   Platform,
   Linking,
@@ -12,6 +11,7 @@ import {
   Dimensions,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
 import { addHistory, isFavorite, toggleFavorite } from '../storage/userData';
@@ -249,7 +249,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   // 1. 인트로 화면
   if (gameState === 'intro') {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.container}>
           <View style={styles.introHeader}>
             <Text style={styles.introEmoji}>🏆</Text>
@@ -290,7 +290,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
     const currentMatchNumber = currentIndex / 2 + 1;
     
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.gameHeader}>
           <Text style={styles.roundTitle}>🏆 {roundName}</Text>
           <Text style={styles.matchProgress}>
@@ -357,7 +357,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   // 3. 우승 결과 화면
   if (gameState === 'winner' && winnerMenu) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.winnerWrapper} showsVerticalScrollIndicator={false}>
           
           {/* 우승 헤더 */}
@@ -453,7 +453,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
   // 폴백 로딩
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={[styles.container, { justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color={colors.feather} />
       </View>

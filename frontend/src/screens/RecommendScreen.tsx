@@ -4,7 +4,6 @@ import {
   Text, 
   View, 
   TouchableOpacity, 
-  SafeAreaView, 
   ScrollView, 
   Platform, 
   Linking, 
@@ -13,6 +12,7 @@ import {
   Alert,
   Animated
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
 import { addHistory, getAvoidTags, getFavorites, getHistories, getPreferences, isFavorite, toggleFavorite } from '../storage/userData';
@@ -554,11 +554,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       
       {/* 1. 인트로 단계 (기피 장르 사전 조율) */}
       {gameState === 'intro' && (
-        <View style={styles.introContainer}>
+        <ScrollView contentContainerStyle={styles.introContainer} showsVerticalScrollIndicator={false}>
           <View style={styles.introHeader}>
             <Text style={styles.introEmoji}>🕵️‍♂️</Text>
             <Text style={styles.introTitle}>메추리 아키네이터</Text>
@@ -605,12 +605,13 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           <TouchableOpacity style={styles.startButton} onPress={() => startAkinator()}>
             <Text style={styles.startButtonText}>추리 퀴즈 시작하기 ➔</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       )}
 
       {/* 2. 아키네이터 질문 구동 단계 */}
       {gameState === 'questioning' && currentQuestion && (
-        <View style={styles.quizContainer}>
+        // 질문이 바뀌면 다시 그려서 스크롤을 맨 위로 되돌린다
+        <ScrollView key={questionNumber} contentContainerStyle={styles.quizContainer} showsVerticalScrollIndicator={false}>
           {/* Header Progress */}
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
@@ -663,7 +664,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
           <TouchableOpacity style={styles.resetButton} onPress={resetGame}>
             <Text style={styles.resetButtonText}>처음으로 돌아가기</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       )}
 
       {/* 2-1. 두 번째 "틀렸어요": 남은 상위 4개로 월드컵 (US-15) */}
@@ -1056,22 +1057,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cream,
   },
   introContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'space-around',
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    justifyContent: 'center',
   },
   introHeader: {
     alignItems: 'center',
-    marginTop: 20,
+    marginBottom: 20,
   },
   introEmoji: {
-    fontFamily: fonts.body,
-    fontSize: 54,
-    marginBottom: 12,
+    fontSize: 48,
+    marginBottom: 8,
   },
   introTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 24,
+    fontFamily: fonts.display,
+    fontSize: 26,
+    lineHeight: 34,
     color: colors.feather,
     marginBottom: 10,
   },
@@ -1086,16 +1089,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginVertical: 10,
+    marginBottom: 12,
   },
+  // 장르 6개를 3 x 2로: 작은 폰에서도 시작 버튼까지 한 화면에 들어오게
   genreButton: {
-    width: '48%',
+    width: '31.5%',
     backgroundColor: colors.surface,
     borderColor: colors.line,
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 12,
-    marginBottom: 12,
+    borderBottomWidth: 4,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 10,
     alignItems: 'center',
   },
   genreButtonExcluded: {
@@ -1103,9 +1109,8 @@ const styles = StyleSheet.create({
     borderColor: colors.chili,
   },
   genreEmoji: {
-    fontFamily: fonts.body,
-    fontSize: 32,
-    marginBottom: 8,
+    fontSize: 28,
+    marginBottom: 6,
   },
   genreLabel: {
     fontFamily: fonts.bold,
@@ -1126,21 +1131,25 @@ const styles = StyleSheet.create({
   },
   startButton: {
     backgroundColor: colors.yolk,
-    borderRadius: 18,
-    paddingVertical: 15,
+    borderRadius: 16,
+    minHeight: 56,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderBottomWidth: 4,
+    borderBottomColor: colors.yolkDeep,
   },
   startButtonText: {
     fontFamily: fonts.bold,
     color: colors.ink,
-    fontSize: 15,
+    fontSize: 17,
   },
 
   // Akinator questioning styles
   quizContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'space-between',
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   progressContainer: {
     marginBottom: 16,
@@ -1163,7 +1172,7 @@ const styles = StyleSheet.create({
   },
   progressBarBackground: {
     height: 8,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.shell,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -1174,24 +1183,28 @@ const styles = StyleSheet.create({
   },
   questionCard: {
     backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 30,
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
     borderWidth: 1,
-    borderColor: colors.feather,
-    marginVertical: 14,
+    borderBottomWidth: 4,
+    borderColor: colors.line,
+    marginTop: 8,
+    marginBottom: 20,
+    minHeight: 200,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   questionIcon: {
-    fontFamily: fonts.body,
-    fontSize: 40,
-    marginBottom: 12,
+    fontSize: 44,
+    marginBottom: 14,
   },
   questionText: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.display,
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 22,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 30,
   },
   btnAnswer: {
     borderRadius: 16,
@@ -1201,11 +1214,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   btnAnswerText: {
-    fontFamily: fonts.bold,
-    fontSize: 14.5,
+    fontFamily: fonts.display,
+    fontSize: 20,
+    lineHeight: 24,
   },
   resetButton: {
-    paddingVertical: 6,
+    paddingVertical: 10,
+    marginTop: 8,
     alignSelf: 'center',
   },
   resetButtonText: {
