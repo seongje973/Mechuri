@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import TasteSheet from '../TasteSheet';
 
@@ -45,5 +46,18 @@ describe('TasteSheet', () => {
     await screen.findByText(/불러오지 못했어요/);
     fireEvent.press(screen.getByText('저장하기'));
     expect(storage.setAvoidTags).not.toHaveBeenCalled();
+  });
+
+  it('기피 태그만 저장되고 취향 저장이 실패하면 그렇게 알린다', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    storage.setPreferences.mockRejectedValueOnce(new Error('offline'));
+    const onClose = jest.fn();
+    render(<TasteSheet visible mode="edit" onClose={onClose} />);
+    await screen.findByText('✓ 오이');
+    fireEvent.press(screen.getByText('저장하기'));
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(alert.mock.calls[0][1]).toMatch(/좋아하는 음식은 저장하지 못했어요/);
+    expect(onClose).not.toHaveBeenCalled();
+    alert.mockRestore();
   });
 });

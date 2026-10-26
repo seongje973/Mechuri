@@ -71,13 +71,21 @@ export default function TasteSheet({ visible, mode, onClose, onSaved }: TasteShe
 
   const handleSave = async () => {
     setSaving(true);
+    // 기피 태그만 저장되고 취향 저장이 실패하면 그렇다고 알려 준다. 다시 저장하면 둘 다 다시 보낸다
+    let tagsSaved = false;
     try {
       const savedTags = await setAvoidTags(tags);
+      tagsSaved = true;
       const savedPrefs = await setPreferences(prefs);
       onSaved?.(savedTags, savedPrefs);
       onClose();
     } catch (e) {
-      Alert.alert('저장하지 못했어요', '잠시 후 다시 시도해 주세요.');
+      Alert.alert(
+        '저장하지 못했어요',
+        tagsSaved
+          ? '알레르기·안 먹는 음식은 저장했지만 좋아하는 음식은 저장하지 못했어요. 다시 시도해 주세요.'
+          : '잠시 후 다시 시도해 주세요.'
+      );
     } finally {
       setSaving(false);
     }
