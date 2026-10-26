@@ -62,7 +62,7 @@ export default function MiniWorldCup({ menus, title = '둘 중 하나만 골라 
 
 const styles = StyleSheet.create({
   container: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-  round: { fontSize: 13, fontFamily: fonts.bold, color: colors.feather, marginBottom: 6 },
+  round: { fontSize: 13, fontFamily: fonts.bold, color: colors.brandText, marginBottom: 6 },
   title: { fontSize: 20, fontFamily: fonts.display, color: colors.ink, marginBottom: 20, textAlign: 'center' },
   row: { flexDirection: 'row', gap: 12 },
   card: {
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: colors.surface,
     borderWidth: 2,
-    borderColor: colors.yolkSoft,
+    borderColor: colors.brandSoft,
   },
   emoji: { fontSize: 44, marginBottom: 10 },
   name: { fontSize: 17, fontFamily: fonts.bold, color: colors.ink },

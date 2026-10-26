@@ -23,11 +23,13 @@ export const layout = {
 } as const;
 
 /**
- * 그림자 대신 "아래로 눌린 두께": 아래쪽에 짙은 4px 테두리.
- * 누르면 테두리가 1px로 줄고 그만큼 내려간다.
+ * 최종 조합안은 평평한 흰 카드에 테두리 없이 그림자도 거의 없다.
+ * raised/pressed는 누를 때 살짝 어두워지는 정도만, card는 흰 카드 기본 모양.
  */
 export const depth = {
-  raised: { borderBottomWidth: 4, borderBottomColor: colors.yolkDeep },
-  pressed: { borderBottomWidth: 1, borderBottomColor: colors.yolkDeep, transform: [{ translateY: 2 }] },
-  card: { borderWidth: 1, borderColor: colors.line, borderBottomWidth: 4 },
+  raised: {},
+  pressed: { opacity: 0.85 },
+  card: { backgroundColor: colors.surface, borderRadius: 24 },
+  /** 지도 위 떠 있는 버튼·시트 */
+  float: { shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
 } satisfies Record<string, ViewStyle>;

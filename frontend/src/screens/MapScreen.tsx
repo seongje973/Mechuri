@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch } from '../api/client';
 import * as Location from 'expo-location';
 import MapView, { Marker, Callout } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radii } from '../theme';
 
 // 카카오 로컬 검색에는 평점이 없어서 평점은 받지도 보여주지도 않는다
@@ -215,6 +216,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
         
         {/* Floating Top Header Bar */}
         <View style={styles.headerBar}>
+          <Ionicons name="search" size={18} color={colors.subtle} style={styles.headerIcon} />
           <View style={styles.headerTextBox}>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {keyword ? `🍽️ ${keyword} 근처 식당` : `📍 ${locationName}`}
@@ -228,8 +230,17 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
               <Text style={styles.clearBtnText}>전체 맛집</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.refreshBtn} onPress={() => loadNearbyRestaurants(keyword)} disabled={loading}>
-            <Text style={styles.refreshBtnText}>{loading ? '...' : '🔄'}</Text>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => loadNearbyRestaurants(keyword)}
+            disabled={loading}
+            accessibilityLabel="새로 찾기"
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.brand} />
+            ) : (
+              <Ionicons name="refresh" size={20} color={colors.subtle} />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -237,7 +248,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
         <View style={styles.mapContainer}>
           {loading && !userCoords ? (
             <View style={styles.mapLoading}>
-              <ActivityIndicator size="large" color={colors.yolkDeep} />
+              <ActivityIndicator size="large" color={colors.brandDeep} />
               <Text style={styles.mapLoadingText}>지도를 로드하고 맛집을 스캔하는 중...</Text>
             </View>
           ) : (
@@ -263,7 +274,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
                     onPress={() => focusOnRestaurant(res, idx)}
                   >
                     <View style={[styles.customPin, isActive && styles.activePin]}>
-                      <Text style={styles.pinEmoji}>🍔</Text>
+                      <Ionicons name="restaurant" size={15} color={isActive ? colors.onBrand : colors.brand} />
                     </View>
                     
                     <Callout tooltip onPress={() => handleOpenMap(res)}>
@@ -327,7 +338,8 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
                   <Text style={styles.cardAddress} numberOfLines={1}>{item.address}</Text>
                   
                   <TouchableOpacity style={styles.findRoadBtn} onPress={() => handleOpenMap(item)}>
-                    <Text style={styles.findRoadText}>길찾기 ➔</Text>
+                    <Ionicons name="navigate" size={15} color={colors.onBrand} />
+                    <Text style={styles.findRoadText}>길찾기</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -343,7 +355,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
   },
   mainContainer: {
     flex: 1,
@@ -359,16 +371,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
+    minHeight: 52,
+    paddingVertical: 8,
+    paddingLeft: 16,
+    paddingRight: 6,
+    borderRadius: radii.full,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     elevation: 6,
+  },
+  headerIcon: {
+    marginRight: 10,
   },
   headerTextBox: {
     flex: 1,
@@ -376,8 +391,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: fonts.bold,
-    color: colors.feather,
-    fontSize: 13.5,
+    color: colors.ink,
+    fontSize: 14.5,
   },
   headerSubtitle: {
     fontFamily: fonts.medium,
@@ -386,23 +401,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   clearBtn: {
-    borderWidth: 1,
-    borderColor: colors.feather,
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    marginRight: 8,
+    backgroundColor: colors.brandSoft,
+    borderRadius: radii.full,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginRight: 2,
   },
   clearBtnText: {
     fontFamily: fonts.bold,
-    color: colors.feather,
-    fontSize: 11,
+    color: colors.brandText,
+    fontSize: 12,
   },
   emptyCard: {
     marginHorizontal: 16,
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: 16,
+    borderRadius: radii.lg,
+    padding: 20,
     alignItems: 'center',
   },
   emptyText: {
@@ -414,7 +428,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     alignSelf: 'center',
     backgroundColor: colors.surface,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 11,
     paddingVertical: 4,
     paddingHorizontal: 10,
@@ -424,21 +438,21 @@ const styles = StyleSheet.create({
   },
   retryBtn: {
     marginTop: 12,
-    backgroundColor: colors.yolk,
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    backgroundColor: colors.brand,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: radii.sm,
   },
   retryBtnText: {
     fontFamily: fonts.bold,
-    color: colors.ink,
+    color: colors.onBrand,
     fontSize: 13,
   },
   refreshBtn: {
-    padding: 2,
-  },
-  refreshBtnText: {
-    fontSize: 14,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mapContainer: {
     flex: 1,
@@ -452,7 +466,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
   },
   mapLoadingText: {
     fontFamily: fonts.medium,
@@ -462,8 +476,8 @@ const styles = StyleSheet.create({
   },
   customPin: {
     backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.line,
+    borderWidth: 2,
+    borderColor: colors.brand,
     width: 34,
     height: 34,
     borderRadius: 17,
@@ -476,18 +490,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   activePin: {
-    borderColor: colors.yolkDeep,
-    backgroundColor: colors.yolk,
-    transform: [{ scale: 1.15 }],
-  },
-  pinEmoji: {
-    fontSize: 16,
+    borderColor: colors.surface,
+    backgroundColor: colors.brand,
+    transform: [{ scale: 1.2 }],
   },
   calloutBubble: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.feather,
     padding: 12,
     width: 220,
     alignItems: 'center',
@@ -505,7 +514,7 @@ const styles = StyleSheet.create({
   },
   calloutMeta: {
     fontFamily: fonts.bold,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 11.5,
     marginBottom: 4,
   },
@@ -518,7 +527,7 @@ const styles = StyleSheet.create({
   },
   calloutLink: {
     fontFamily: fonts.bold,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 11,
     textDecorationLine: 'underline',
   },
@@ -535,21 +544,20 @@ const styles = StyleSheet.create({
   },
   restaurantCard: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
     borderRadius: radii.lg,
-    padding: 16,
+    padding: 18,
     width: width - 48,
     marginRight: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
     elevation: 8,
   },
   activeCard: {
-    borderColor: colors.feather,
-    borderWidth: 1.5,
+    borderColor: colors.brand,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -558,20 +566,21 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardName: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.heavy,
     color: colors.ink,
-    fontSize: 15.5,
+    fontSize: 17,
     flex: 1,
     paddingRight: 8,
   },
   cardBadge: {
     fontFamily: fonts.bold,
-    backgroundColor: colors.yolkSoft,
-    color: colors.feather,
-    fontSize: 9.5,
+    backgroundColor: colors.brandSoft,
+    color: colors.brandText,
+    fontSize: 11,
     paddingVertical: 3,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     borderRadius: 6,
+    overflow: 'hidden',
   },
   cardMeta: {
     fontFamily: fonts.medium,
@@ -586,14 +595,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   findRoadBtn: {
-    backgroundColor: colors.yolk,
-    paddingVertical: 10,
-    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: colors.brand,
+    minHeight: 46,
+    borderRadius: radii.sm,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   findRoadText: {
     fontFamily: fonts.bold,
-    color: colors.ink,
-    fontSize: 13,
+    color: colors.onBrand,
+    fontSize: 14.5,
   },
 });

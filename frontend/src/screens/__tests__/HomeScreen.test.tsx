@@ -42,17 +42,19 @@ describe('HomeScreen', () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
-  it('"바로 추천" 한 번이면 추천 탭으로 가며 바로 시작 신호를 넘긴다', async () => {
+  it('"바로 추천 받기" 한 번이면 추천 탭으로 가며 바로 시작 신호를 넘긴다', async () => {
     const { renderer, navigation } = await renderHome();
-    pressByText(renderer, '바로 추천');
+    pressByText(renderer, '바로 추천 받기');
     expect(navigation.navigate).toHaveBeenCalledWith('메뉴 추천', { autoStart: expect.any(Number) });
   });
 
-  it('월드컵과 지도는 보조 영역에서 갈 수 있다', async () => {
+  it('월드컵, 같이 정하기, 지도는 목록 카드에서 갈 수 있다', async () => {
     const { renderer, navigation } = await renderHome();
     pressByText(renderer, '메뉴 월드컵');
+    pressByText(renderer, '같이 정하기');
     pressByText(renderer, '주변 식당');
     expect(navigation.navigate).toHaveBeenCalledWith('월드컵');
+    expect(navigation.navigate).toHaveBeenCalledWith('같이');
     expect(navigation.navigate).toHaveBeenCalledWith('지도');
   });
 

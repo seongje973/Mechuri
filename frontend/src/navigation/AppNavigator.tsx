@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, ActivityIndicator, Linking, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch, clearSession, getAuthToken, getStoredProfile, saveProfile, saveSession } from '../api/client';
@@ -22,36 +23,19 @@ import GroupScreen from '../screens/GroupScreen';
 
 const Tab = createBottomTabNavigator();
 
-/** 탭바 내용 높이(safe area 제외): 위 여백 6 + 아이콘 28 + 글자 + 아래 여유 */
-const TAB_BAR_CONTENT_HEIGHT = 62;
+/** 탭바 내용 높이(safe area 제외): 위 여백 8 + 아이콘 24 + 글자 + 아래 여유 */
+const TAB_BAR_CONTENT_HEIGHT = 58;
 
-/** 하단 탭 아이콘. 아이콘 글꼴 없이 이모지로 그린다 */
-const TAB_ICONS: Record<string, string> = {
-  홈: '🏠',
-  '메뉴 추천': '🐣',
-  같이: '👥',
-  지도: '📍',
-  마이페이지: '🙂',
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+/** 하단 탭 아이콘: 켜지면 채운 모양, 꺼지면 선 모양 */
+const TAB_ICONS: Record<string, { on: IoniconName; off: IoniconName }> = {
+  홈: { on: 'home', off: 'home-outline' },
+  '메뉴 추천': { on: 'help-circle', off: 'help-circle-outline' },
+  같이: { on: 'people', off: 'people-outline' },
+  지도: { on: 'location', off: 'location-outline' },
+  마이페이지: { on: 'person', off: 'person-outline' },
 };
-
-const tabStyles = StyleSheet.create({
-  iconWrap: {
-    width: 44,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconWrapActive: {
-    backgroundColor: colors.yolkSoft,
-  },
-  icon: {
-    fontSize: 18,
-  },
-  iconInactive: {
-    opacity: 0.55,
-  },
-});
 
 export default function AppNavigator() {
   const insets = useSafeAreaInsets();
@@ -257,8 +241,8 @@ export default function AppNavigator() {
   // Loading Splash Screen
   if (isLoggedIn === null) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.cream, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={colors.feather} />
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={colors.brandText} />
       </View>
     );
   }
@@ -274,30 +258,29 @@ export default function AppNavigator() {
       <Tab.Navigator
         initialRouteName="홈"
         screenOptions={({ route }) => ({
-          tabBarActiveTintColor: colors.feather,
-          tabBarInactiveTintColor: colors.muted,
-          // 아이콘 위, 글자 아래. 기본 높이(49)로는 알약 아이콘과 글자가 다 안 들어가서 내용 높이를 직접 잡고,
-          // 홈 바·내비게이션 바 높이(safe area)는 아래 여백으로 라이브러리가 더한다
-          tabBarIcon: ({ focused }) => (
-            <View style={[tabStyles.iconWrap, focused && tabStyles.iconWrapActive]}>
-              <Text style={[tabStyles.icon, !focused && tabStyles.iconInactive]}>{TAB_ICONS[route.name] ?? '•'}</Text>
-            </View>
-          ),
+          tabBarActiveTintColor: colors.brand,
+          tabBarInactiveTintColor: colors.faint,
+          // 아이콘 위, 글자 아래. 홈 바·내비게이션 바 높이(safe area)는 아래 여백으로 라이브러리가 더한다
+          tabBarIcon: ({ focused, color }) => {
+            const icon = TAB_ICONS[route.name];
+            if (!icon) return null;
+            return <Ionicons name={focused ? icon.on : icon.off} size={24} color={color} />;
+          },
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.line,
             borderTopWidth: 1,
             height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
-            paddingTop: 6,
+            paddingTop: 8,
             elevation: 0,
             shadowOpacity: 0,
           },
           tabBarLabelStyle: {
-            fontFamily: fonts.medium,
+            fontFamily: fonts.bold,
             fontSize: 11,
             marginTop: 2,
           },
-          sceneStyle: { backgroundColor: colors.cream },
+          sceneStyle: { backgroundColor: colors.bg },
           headerShown: false, // We design our own custom beautiful headers
         })}
       >

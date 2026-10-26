@@ -86,7 +86,7 @@ export default function LoginSheet({ visible, reason, onDismiss, onClose, onLogg
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: colors.scrim },
   sheet: {
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,
     paddingHorizontal: 24,
@@ -102,14 +102,12 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     backgroundColor: colors.kakao,
     borderRadius: radii.md,
-    borderBottomWidth: 4,
-    borderBottomColor: colors.yolkDeep,
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  kakaoText: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
+  kakaoText: { fontFamily: fonts.bold, fontSize: 16, color: colors.kakaoText },
   devBtn: { marginTop: 14, padding: 6 },
-  devText: { fontFamily: fonts.body, fontSize: 13, color: colors.feather, textDecorationLine: 'underline' },
+  devText: { fontFamily: fonts.body, fontSize: 13, color: colors.brandText, textDecorationLine: 'underline' },
   laterBtn: { marginTop: 10, padding: 8 },
   laterText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.muted },
 });

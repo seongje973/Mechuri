@@ -9,7 +9,9 @@ import {
 } from 'react-native';
 import { apiFetch } from '../api/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, layout, radii, spacing, typography } from '../theme';
+import QuailBadge from '../components/QuailBadge';
 
 interface HomeScreenProps {
   navigation: any;
@@ -33,23 +35,6 @@ export const getGreeting = (hour: number = new Date().getHours()) => {
   if (hour < 18) return '출출하지? 간식이든 밥이든 맞혀볼게.';
   return '저녁 아직이지? 오늘 메뉴, 내가 맞혀볼게.';
 };
-
-// 탐정 메추리 "추리". 이미지 에셋이 생기기 전까지 도형으로 그린다.
-function Quail() {
-  return (
-    <View style={quail.wrap}>
-      <Text style={quail.plume}>?</Text>
-      <View style={quail.body}>
-        <View style={quail.belly} />
-        <View style={[quail.eye, { left: 26 }]} />
-        <View style={[quail.eye, { right: 26 }]} />
-        <View style={[quail.cheek, { left: 16 }]} />
-        <View style={[quail.cheek, { right: 16 }]} />
-        <View style={quail.beak} />
-      </View>
-    </View>
-  );
-}
 
 export default function HomeScreen({ navigation, isLoggedIn, userProfile }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
@@ -88,6 +73,13 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
 
   const nickname = isLoggedIn && userProfile?.nickname ? userProfile.nickname : null;
 
+  // 홈은 회색 바탕에 흰 카드: 추천 받기 카드 → 다른 방법 목록 → 요즘 많이 고른 메뉴
+  const shortcuts: { label: string; desc: string; icon: React.ComponentProps<typeof Ionicons>['name']; onPress: () => void }[] = [
+    { label: '메뉴 월드컵', desc: '둘 중 하나씩 골라요', icon: 'trophy-outline', onPress: () => navigation.navigate('월드컵') },
+    { label: '같이 정하기', desc: '친구들과 같은 질문에 답해요', icon: 'people-outline', onPress: () => navigation.navigate('같이') },
+    { label: '주변 식당', desc: '지도에서 바로 찾아요', icon: 'location-outline', onPress: () => navigation.navigate('지도') },
+  ];
+
   return (
     <View style={[styles.mainContainer, { paddingTop: insets.top }]}>
       <ScrollView
@@ -97,73 +89,60 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
         ]}
         showsVerticalScrollIndicator={false}
       >
-
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.appTitle}>메추리</Text>
           <TouchableOpacity
-            style={styles.profileBadge}
+            style={styles.headerButton}
             onPress={() => navigation.navigate('마이페이지')}
             accessibilityLabel="내 정보"
           >
-            <Text style={styles.profileEmoji}>{isLoggedIn ? '😋' : '👤'}</Text>
+            <Ionicons name="person-circle-outline" size={26} color={colors.subtle} />
           </TouchableOpacity>
         </View>
 
-        {/* Hero: 바로 추천 */}
-        <View style={styles.hero}>
-          <View style={styles.bubble}>
-            <Text style={styles.bubbleText}>
+        <View style={styles.heroCard}>
+          <View style={styles.greetingRow}>
+            <QuailBadge size={44} />
+            <Text style={styles.greetingText}>
               {nickname ? `${nickname}, ` : ''}{getGreeting()}
             </Text>
-            <View style={styles.bubbleTail} />
           </View>
-          <Quail />
+          <Text style={styles.heroTitle}>메뉴 고민,{'\n'}질문 몇 개로 끝내요</Text>
           <TouchableOpacity
             style={styles.ctaButton}
             onPress={startRecommend}
             activeOpacity={0.85}
             accessibilityRole="button"
           >
-            <Text style={styles.ctaText}>바로 추천</Text>
-          </TouchableOpacity>
-          <Text style={styles.ctaHint}>질문 몇 개에 답하면 오늘 메뉴를 골라 드려요.</Text>
-        </View>
-
-        {/* 보조 영역: 다른 방법 */}
-        <Text style={styles.sectionTitle}>다른 방법으로 정하기</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={styles.subCard}
-            onPress={() => navigation.navigate('월드컵')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.subEmoji}>🏆</Text>
-            <Text style={styles.subTitle}>메뉴 월드컵</Text>
-            <Text style={styles.subDesc}>둘 중 하나씩 골라요</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.subCard}
-            onPress={() => navigation.navigate('지도')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.subEmoji}>📍</Text>
-            <Text style={styles.subTitle}>주변 식당</Text>
-            <Text style={styles.subDesc}>지도에서 바로 찾아요</Text>
+            <Text style={styles.ctaText}>바로 추천 받기</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 보조 영역: 인기 랭킹 */}
-        <View style={styles.rankingHeaderRow}>
-          <Text style={styles.sectionTitleInline}>요즘 많이 고른 메뉴</Text>
-          <TouchableOpacity onPress={fetchRanking} disabled={loadingRanking} style={styles.refreshBtn}>
-            <Text style={styles.refreshBtnText}>새로고침</Text>
-          </TouchableOpacity>
+        <View style={styles.listCard}>
+          {shortcuts.map((item) => (
+            <TouchableOpacity key={item.label} style={styles.listRow} onPress={item.onPress} activeOpacity={0.7}>
+              <View style={styles.listIcon}>
+                <Ionicons name={item.icon} size={22} color={colors.subtle} />
+              </View>
+              <View style={styles.listTextWrap}>
+                <Text style={styles.listTitle}>{item.label}</Text>
+                <Text style={styles.listDesc}>{item.desc}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+            </TouchableOpacity>
+          ))}
         </View>
+
         <View style={styles.rankingCard}>
+          <View style={styles.rankingHeaderRow}>
+            <Text style={styles.sectionTitleInline}>요즘 많이 고른 메뉴</Text>
+            <TouchableOpacity onPress={fetchRanking} disabled={loadingRanking} style={styles.refreshBtn}>
+              <Text style={styles.refreshBtnText}>새로고침</Text>
+            </TouchableOpacity>
+          </View>
           {loadingRanking ? (
             <View style={styles.rankingLoading}>
-              <ActivityIndicator size="small" color={colors.yolkDeep} />
+              <ActivityIndicator size="small" color={colors.brand} />
               <Text style={styles.rankingLoadingText}>랭킹을 불러오는 중이에요</Text>
             </View>
           ) : rankingList.length === 0 ? (
@@ -171,14 +150,8 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
               {rankingFailed ? '랭킹을 불러오지 못했어요. 잠시 후 새로고침해 주세요.' : '아직 데이터가 없어요. 첫 기록을 남겨 보세요!'}
             </Text>
           ) : (
-            rankingList.map((item, idx) => (
-              <View
-                key={`${item.rank}-${item.menuName}`}
-                style={[
-                  styles.rankingRow,
-                  idx !== rankingList.length - 1 && styles.rankingBorder
-                ]}
-              >
+            rankingList.map((item) => (
+              <View key={`${item.rank}-${item.menuName}`} style={styles.rankingRow}>
                 <Text style={[styles.rankNumber, item.rank <= 3 && styles.rankTop]}>{item.rank}</Text>
                 <Text style={styles.rankMenuEmoji}>{item.emoji}</Text>
                 <Text style={styles.rankMenuName}>{item.menuName}</Text>
@@ -206,149 +179,128 @@ export default function HomeScreen({ navigation, isLoggedIn, userProfile }: Home
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
   },
   container: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: 10,
+    paddingTop: 8,
+    gap: spacing.md,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingLeft: 4,
   },
   appTitle: {
-    ...typography.title,
-    color: colors.feather,
+    fontFamily: fonts.display,
+    fontSize: 22,
+    lineHeight: 30,
+    letterSpacing: -0.5,
+    color: colors.brand,
   },
-  profileBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
+  headerButton: {
+    width: layout.minTouch,
+    height: layout.minTouch,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.line,
   },
-  profileEmoji: {
-    fontSize: 20,
-  },
-  hero: {
+  heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     paddingVertical: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
+    gap: 18,
+  },
+  greetingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.line,
-    marginBottom: 28,
+    gap: 10,
   },
-  bubble: {
-    backgroundColor: colors.shell,
-    borderRadius: radii.md,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginBottom: 14,
-    maxWidth: '100%',
+  greetingText: {
+    flex: 1,
+    ...typography.caption,
+    fontFamily: fonts.body,
+    color: colors.muted,
   },
-  bubbleText: {
-    color: colors.ink,
+  heroTitle: {
     fontFamily: fonts.display,
-    fontSize: 18,
-    lineHeight: 24,
-    textAlign: 'center',
-  },
-  bubbleTail: {
-    position: 'absolute',
-    bottom: -6,
-    alignSelf: 'center',
-    width: 12,
-    height: 12,
-    backgroundColor: colors.shell,
-    transform: [{ rotate: '45deg' }],
+    fontSize: 27,
+    lineHeight: 37,
+    letterSpacing: -0.8,
+    color: colors.ink,
   },
   ctaButton: {
-    alignSelf: 'stretch',
-    backgroundColor: colors.yolk,
+    height: layout.buttonHeight,
+    backgroundColor: colors.brand,
     borderRadius: radii.md,
-    borderBottomWidth: 4,
-    borderBottomColor: colors.yolkDeep,
-    paddingVertical: 18,
     alignItems: 'center',
-    marginTop: 18,
+    justifyContent: 'center',
   },
   ctaText: {
     ...typography.button,
-    fontSize: 20,
-    lineHeight: 28,
+    color: colors.onBrand,
+  },
+  listCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingVertical: 8,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    minHeight: 64,
+  },
+  listIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.sm,
+    backgroundColor: colors.fill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listTextWrap: {
+    flex: 1,
+  },
+  listTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: fonts.bold,
     color: colors.ink,
   },
-  ctaHint: {
+  listDesc: {
     ...typography.caption,
+    fontFamily: fonts.body,
     color: colors.muted,
-    marginTop: 10,
-  },
-  sectionTitle: {
-    ...typography.heading,
-    color: colors.ink,
-    marginBottom: spacing.md,
   },
   sectionTitleInline: {
     ...typography.heading,
     color: colors.ink,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 28,
-  },
-  subCard: {
-    width: '48%',
+  rankingCard: {
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderBottomWidth: 4,
-  },
-  subEmoji: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  subTitle: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
-    color: colors.ink,
-    marginBottom: 4,
-  },
-  subDesc: {
-    ...typography.caption,
-    color: colors.muted,
+    borderRadius: radii.lg,
+    paddingTop: 16,
+    paddingBottom: 8,
+    paddingHorizontal: 22,
   },
   rankingHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   refreshBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    minHeight: layout.minTouch,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   refreshBtnText: {
     ...typography.caption,
     color: colors.muted,
-  },
-  rankingCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    paddingVertical: 4,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
-    marginBottom: 20,
   },
   rankingLoading: {
     flexDirection: 'row',
@@ -370,21 +322,17 @@ const styles = StyleSheet.create({
   rankingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-  },
-  rankingBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    paddingVertical: 10,
   },
   rankNumber: {
     width: 22,
-    fontSize: 14,
-    fontFamily: fonts.bold,
-    color: colors.muted,
+    fontSize: 15,
+    fontFamily: fonts.display,
+    color: colors.ink,
     textAlign: 'center',
   },
   rankTop: {
-    color: colors.yolkDeep,
+    color: colors.brand,
   },
   rankMenuEmoji: {
     fontSize: 20,
@@ -393,92 +341,33 @@ const styles = StyleSheet.create({
   rankMenuName: {
     flex: 1,
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: fonts.bold,
   },
   rankMenuCategory: {
+    ...typography.caption,
+    fontFamily: fonts.body,
     color: colors.muted,
-    fontSize: 11,
-    fontFamily: fonts.medium,
   },
   loginCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.shell,
-    borderRadius: radii.md,
-    padding: 14,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingVertical: 18,
+    paddingHorizontal: 22,
   },
   loginText: {
     flex: 1,
     color: colors.ink,
     fontFamily: fonts.body,
-    fontSize: 12.5,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 19,
     paddingRight: spacing.sm,
   },
   loginGo: {
-    color: colors.feather,
-    fontSize: 13,
+    color: colors.brandText,
+    fontSize: 14,
     fontFamily: fonts.bold,
-  },
-});
-
-const quail = StyleSheet.create({
-  wrap: {
-    alignItems: 'center',
-  },
-  plume: {
-    fontFamily: fonts.display,
-    fontSize: 28,
-    lineHeight: 34,
-    color: colors.feather,
-    marginBottom: -8,
-  },
-  body: {
-    width: 104,
-    height: 92,
-    borderRadius: 52,
-    backgroundColor: colors.quail,
-  },
-  belly: {
-    position: 'absolute',
-    bottom: 0,
-    left: 18,
-    right: 18,
-    height: 46,
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    backgroundColor: colors.cream,
-  },
-  eye: {
-    position: 'absolute',
-    top: 30,
-    width: 9,
-    height: 11,
-    borderRadius: 5,
-    backgroundColor: colors.ink,
-  },
-  cheek: {
-    position: 'absolute',
-    top: 44,
-    width: 12,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.blush,
-    opacity: 0.7,
-  },
-  beak: {
-    position: 'absolute',
-    top: 42,
-    alignSelf: 'center',
-    left: 46,
-    width: 12,
-    height: 9,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
-    backgroundColor: colors.yolk,
   },
 });

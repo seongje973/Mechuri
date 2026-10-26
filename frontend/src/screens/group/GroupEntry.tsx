@@ -100,7 +100,7 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
           {AVOID_TAG_OPTIONS.map(tag => {
             const on = avoidTags.includes(tag);
             return (
-              <TouchableOpacity key={tag} style={[gs.chip, on && gs.chipOn]} onPress={() => toggleTag(tag)} accessibilityState={{ selected: on }}>
+              <TouchableOpacity key={tag} style={[gs.chip, on && gs.chipAvoid]} onPress={() => toggleTag(tag)} accessibilityState={{ selected: on }}>
                 <Text style={gs.chipText}>{on ? '✓ ' : ''}{tag}</Text>
               </TouchableOpacity>
             );
@@ -127,7 +127,7 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
           disabled={normalizedCode.length !== ROOM_CODE_LENGTH || busy !== null}
           onPress={() => run('join')}
         >
-          {busy === 'join' ? <ActivityIndicator color={colors.ink} /> : <Text style={gs.primaryText}>참가하기</Text>}
+          {busy === 'join' ? <ActivityIndicator color={colors.onBrand} /> : <Text style={gs.primaryText}>참가하기</Text>}
         </TouchableOpacity>
       </View>
 

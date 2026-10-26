@@ -262,7 +262,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
           
           <View style={styles.introOptionContainer}>
             <TouchableOpacity 
-              style={[styles.introButton, { borderColor: colors.feather }]} 
+              style={[styles.introButton, { borderColor: colors.brandText }]} 
               onPress={() => startWorldCup(16)}
             >
               <Text style={styles.introButtonEmoji}>🔥</Text>
@@ -398,7 +398,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 
             {loadingRestaurants ? (
               <View style={styles.loadingWrapper}>
-                <ActivityIndicator size="large" color={colors.feather} />
+                <ActivityIndicator size="large" color={colors.brandText} />
                 <Text style={styles.loadingText}>메추리가 실제 식당 정보를 검색하는 중...</Text>
               </View>
             ) : restaurantsError ? (
@@ -455,7 +455,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.feather} />
+        <ActivityIndicator size="large" color={colors.brandText} />
       </View>
     </SafeAreaView>
   );
@@ -464,7 +464,7 @@ export default function WorldCupScreen({ navigation, isLoggedIn, userProfile }: 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
   },
   container: {
     flex: 1,
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
   introTitle: {
     fontFamily: fonts.bold,
     fontSize: 26,
-    color: colors.feather,
+    color: colors.brandText,
     marginBottom: 12,
   },
   introSubtitle: {
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
   },
   roundTitle: {
     fontFamily: fonts.bold,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 22,
     textAlign: 'center',
     marginBottom: 4,
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: colors.yolk,
+    backgroundColor: colors.brand,
     borderRadius: 3,
   },
   cardsContainer: {
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: colors.feather,
+    borderColor: colors.brandText,
     padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -609,8 +609,8 @@ const styles = StyleSheet.create({
   },
   selectBadge: {
     marginTop: 12,
-    backgroundColor: colors.yolkSoft,
-    borderColor: colors.feather,
+    backgroundColor: colors.brandSoft,
+    borderColor: colors.brandText,
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 16,
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   },
   selectBadgeText: {
     fontFamily: fonts.bold,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 11,
   },
   vsContainer: {
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
   },
   winnerSubtitle: {
     fontFamily: fonts.bold,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 14,
     marginBottom: 4,
   },
@@ -674,10 +674,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: colors.feather,
+    borderColor: colors.brandText,
     padding: 20,
     marginBottom: 24,
-    shadowColor: colors.yolk,
+    shadowColor: colors.brand,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   baeminBtn: {
-    backgroundColor: colors.yolk,
+    backgroundColor: colors.brand,
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
   },
   baeminBtnText: {
     fontFamily: fonts.bold,
-    color: colors.ink,
+    color: colors.onBrand,
     fontSize: 14,
   },
 
@@ -777,8 +777,8 @@ const styles = StyleSheet.create({
   },
   resTypeBadge: {
     fontFamily: fonts.bold,
-    backgroundColor: colors.yolkSoft,
-    color: colors.feather,
+    backgroundColor: colors.brandSoft,
+    color: colors.brandText,
     fontSize: 9,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -822,11 +822,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colors.feather,
+    borderColor: colors.brandText,
   },
   reloadBtnText: {
     fontFamily: fonts.bold,
-    color: colors.feather,
+    color: colors.brandText,
     fontSize: 13,
   },
   emptyText: {

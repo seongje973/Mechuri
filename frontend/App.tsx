@@ -13,7 +13,7 @@ export default function App() {
 
   // 로드에 실패하면 시스템 글꼴로 그냥 띄운다
   if (!fontsLoaded && !fontError) {
-    return <View style={{ flex: 1, backgroundColor: colors.cream }} />;
+    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   }
 
   return (

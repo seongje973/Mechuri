@@ -132,9 +132,14 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
     <View>
       <Text style={styles.lead}>우리의 메뉴는…</Text>
       <View style={[gs.card, styles.winnerCard]}>
-        <Text style={styles.winnerEmoji}>{winnerItem.emoji}</Text>
-        <Text style={styles.winnerName}>{winnerItem.name}</Text>
-        <Text style={gs.subtitle}>{winnerItem.desc}</Text>
+        <View style={styles.winnerImage}>
+          <Text style={styles.winnerEmoji}>{winnerItem.emoji}</Text>
+        </View>
+        <View style={styles.winnerBody}>
+          <View style={styles.winnerBadge}><Text style={styles.winnerBadgeText}>같이 고른 메뉴</Text></View>
+          <Text style={styles.winnerName}>{winnerItem.name}</Text>
+          <Text style={styles.winnerDesc}>{winnerItem.desc}</Text>
+        </View>
       </View>
 
       <View style={gs.card}>
@@ -178,10 +183,15 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
 }
 
 const styles = StyleSheet.create({
-  lead: { fontSize: 18, fontFamily: fonts.bold, color: colors.feather, textAlign: 'center', marginTop: 8 },
-  winnerCard: { alignItems: 'center', paddingVertical: 28 },
-  winnerEmoji: { fontSize: 64 },
-  winnerName: { fontSize: 30, fontFamily: fonts.display, color: colors.ink, marginTop: 8 },
+  lead: { fontSize: 15, fontFamily: fonts.bold, color: colors.brandText, marginTop: 4, paddingHorizontal: 4 },
+  winnerCard: { padding: 0, overflow: 'hidden' },
+  winnerImage: { height: 170, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center' },
+  winnerEmoji: { fontFamily: fonts.body, fontSize: 72 },
+  winnerBody: { padding: 20 },
+  winnerBadge: { alignSelf: 'flex-start', backgroundColor: colors.brand, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  winnerBadgeText: { fontFamily: fonts.heavy, fontSize: 12, color: colors.onBrand },
+  winnerName: { fontSize: 30, lineHeight: 40, letterSpacing: -1, fontFamily: fonts.display, color: colors.ink, marginTop: 8 },
+  winnerDesc: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21, color: colors.muted, marginTop: 4 },
   waitTitle: { fontSize: 17, fontFamily: fonts.bold, color: colors.ink },
   other: { fontFamily: fonts.body, fontSize: 15, color: colors.ink, paddingVertical: 4 },
 });

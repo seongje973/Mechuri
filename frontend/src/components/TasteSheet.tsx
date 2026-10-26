@@ -116,7 +116,7 @@ export default function TasteSheet({ visible, mode, onClose, onSaved }: TasteShe
           <Text style={styles.body}>{copy.body}</Text>
 
           {loading ? (
-            <ActivityIndicator color={colors.yolkDeep} style={{ marginVertical: 24 }} />
+            <ActivityIndicator color={colors.brandDeep} style={{ marginVertical: 24 }} />
           ) : loadFailed ? (
             <Text style={styles.error}>저장된 설정을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 열어 주세요.</Text>
           ) : (
@@ -154,7 +154,7 @@ export default function TasteSheet({ visible, mode, onClose, onSaved }: TasteShe
             disabled={saving || loading || loadFailed}
             activeOpacity={0.85}
           >
-            {saving ? <ActivityIndicator color={colors.ink} /> : <Text style={styles.saveText}>저장하기</Text>}
+            {saving ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.saveText}>저장하기</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={onClose} disabled={saving} style={styles.laterBtn}>
             <Text style={styles.laterText}>{mode === 'login' ? '나중에 마이페이지에서 할게요' : '닫기'}</Text>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: colors.scrim },
   sheet: {
     maxHeight: '85%',
-    backgroundColor: colors.cream,
+    backgroundColor: colors.bg,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,
     paddingTop: 12,
@@ -188,20 +188,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  chipOn: { backgroundColor: colors.yolkSoft, borderColor: colors.yolkDeep },
+  chipOn: { backgroundColor: colors.brandSoft, borderColor: colors.brandDeep },
   chipText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.ink },
   chipTextOn: { fontFamily: fonts.bold },
   note: { fontFamily: fonts.body, fontSize: 12, lineHeight: 18, color: colors.muted, marginTop: 8 },
   saveBtn: {
     marginTop: 26,
-    backgroundColor: colors.yolk,
+    backgroundColor: colors.brand,
     borderRadius: radii.md,
-    borderBottomWidth: 4,
-    borderBottomColor: colors.yolkDeep,
-    paddingVertical: 15,
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  saveText: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
+  saveText: { fontFamily: fonts.heavy, fontSize: 16, color: colors.onBrand },
   disabled: { opacity: 0.6 },
   error: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21, color: colors.chiliText, textAlign: 'center', marginVertical: 24 },
   laterBtn: { marginTop: 10, padding: 8, alignItems: 'center' },
