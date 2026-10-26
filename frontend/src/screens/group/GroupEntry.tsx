@@ -27,14 +27,14 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
   const [error, setError] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  // 마이페이지·로그인 직후에 저장한 알레르기·기피 태그를 기본으로 골라 둔다 (게스트는 기기 값).
+  // 마이페이지·로그인 직후에 저장한 알레르기·기피 태그로 바꿔 둔다 (로그인은 서버, 게스트는 기기 값이 최신).
   // 읽는 사이 사용자가 이미 칩을 눌렀으면 덮어쓰지 않는다
   const touchedRef = useRef(false);
   useEffect(() => {
     let alive = true;
     getAvoidTags()
       .then(saved => {
-        if (alive && !touchedRef.current && saved.length > 0) setAvoidTags(prev => Array.from(new Set([...prev, ...saved])));
+        if (alive && !touchedRef.current) setAvoidTags(saved);
       })
       .catch(() => {});
     return () => {
