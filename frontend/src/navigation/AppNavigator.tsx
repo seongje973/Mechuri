@@ -264,10 +264,12 @@ export default function AppNavigator() {
           {props => <RecommendScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
         </Tab.Screen>
 
+        {/* 월드컵은 하단 탭에서 빼고 홈의 "메뉴 월드컵" 카드로만 들어간다. 화면은 그대로 둬서 navigate('월드컵')이 계속 동작한다 */}
         <Tab.Screen 
           name="월드컵" 
           options={{
-            tabBarLabel: '🏆 월드컵',
+            tabBarButton: () => null,
+            tabBarItemStyle: { display: 'none' },
           }}
         >
           {props => <WorldCupScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
