@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Platform, View, ActivityIndicator, Linking, Alert } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, Linking, Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { apiFetch, clearSession, getAuthToken, getStoredProfile, saveProfile, saveSession } from '../api/client';
 import { exchangeKakaoLoginCode } from '../api/kakaoLogin';
@@ -9,6 +9,7 @@ import LoginSheet from '../components/LoginSheet';
 import TasteSheet from '../components/TasteSheet';
 import { parseRoomCodeFromUrl } from '../api/rooms';
 import { navigationRef } from './navigationRef';
+import { colors, fonts } from '../theme';
 
 // Import Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -19,6 +20,34 @@ import MyPageScreen from '../screens/MyPageScreen';
 import GroupScreen from '../screens/GroupScreen';
 
 const Tab = createBottomTabNavigator();
+
+/** 하단 탭 아이콘. 아이콘 글꼴 없이 이모지로 그린다 */
+const TAB_ICONS: Record<string, string> = {
+  홈: '🏠',
+  '메뉴 추천': '🐣',
+  같이: '👥',
+  지도: '📍',
+  마이페이지: '🙂',
+};
+
+const tabStyles = StyleSheet.create({
+  iconWrap: {
+    width: 44,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapActive: {
+    backgroundColor: colors.yolkSoft,
+  },
+  icon: {
+    fontSize: 18,
+  },
+  iconInactive: {
+    opacity: 0.55,
+  },
+});
 
 export default function AppNavigator() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
@@ -223,8 +252,8 @@ export default function AppNavigator() {
   // Loading Splash Screen
   if (isLoggedIn === null) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#1c1917', alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#fbbf24" />
+      <View style={{ flex: 1, backgroundColor: colors.cream, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={colors.feather} />
       </View>
     );
   }
@@ -240,34 +269,35 @@ export default function AppNavigator() {
       <Tab.Navigator
         initialRouteName="홈"
         screenOptions={({ route }) => ({
-          tabBarActiveTintColor: '#fbbf24', // Warm Gold/Amber
-          tabBarInactiveTintColor: '#8c8a82', // Warm Gray
-          tabBarLabelPosition: 'beside-icon', // 텍스트를 가로로 배치하여 아이콘 공간을 옆으로 밀어냄
-          tabBarIcon: () => null,            // 아이콘을 완전히 안 그리도록 null 반환 (깨진 상자 제거)
+          tabBarActiveTintColor: colors.feather,
+          tabBarInactiveTintColor: colors.muted,
+          // 아이콘 위, 글자 아래. 높이와 아래 여백은 라이브러리가 홈 바·내비게이션 바 높이(safe area)에 맞춰 잡는다
+          tabBarIcon: ({ focused }) => (
+            <View style={[tabStyles.iconWrap, focused && tabStyles.iconWrapActive]}>
+              <Text style={[tabStyles.icon, !focused && tabStyles.iconInactive]}>{TAB_ICONS[route.name] ?? '•'}</Text>
+            </View>
+          ),
           tabBarStyle: {
-            backgroundColor: '#1c1917', // Warm Dark Stone
-            borderTopColor: 'rgba(255, 255, 255, 0.08)',
+            backgroundColor: colors.surface,
+            borderTopColor: colors.line,
             borderTopWidth: 1,
-            height: Platform.OS === 'ios' ? 76 : 58,
-            paddingBottom: Platform.OS === 'ios' ? 20 : 0,
-            elevation: 12,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 8,
+            paddingTop: 6,
+            elevation: 0,
+            shadowOpacity: 0,
           },
           tabBarLabelStyle: {
-            fontSize: 12.5,
-            fontWeight: '700',
-            letterSpacing: 0.5,
+            fontFamily: fonts.medium,
+            fontSize: 11,
+            marginTop: 2,
           },
+          sceneStyle: { backgroundColor: colors.cream },
           headerShown: false, // We design our own custom beautiful headers
         })}
       >
         <Tab.Screen 
           name="홈" 
           options={{
-            tabBarLabel: '🏠 홈',
+            tabBarLabel: '홈',
           }}
         >
           {props => <HomeScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
@@ -276,7 +306,7 @@ export default function AppNavigator() {
         <Tab.Screen 
           name="메뉴 추천" 
           options={{
-            tabBarLabel: '🍔 추천',
+            tabBarLabel: '추천',
           }}
         >
           {props => <RecommendScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
@@ -296,7 +326,7 @@ export default function AppNavigator() {
         <Tab.Screen
           name="같이"
           options={{
-            tabBarLabel: '👥 같이',
+            tabBarLabel: '같이',
           }}
         >
           {props => <GroupScreen {...props} isLoggedIn={isLoggedIn} userProfile={userProfile} />}
@@ -306,14 +336,14 @@ export default function AppNavigator() {
           name="지도" 
           component={MapScreen}
           options={{
-            tabBarLabel: '📍 지도',
+            tabBarLabel: '지도',
           }}
         />
         
         <Tab.Screen 
           name="마이페이지" 
           options={{
-            tabBarLabel: '👤 내정보',
+            tabBarLabel: '내정보',
           }}
         >
           {props => (

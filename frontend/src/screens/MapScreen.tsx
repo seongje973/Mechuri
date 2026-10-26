@@ -3,7 +3,6 @@ import {
   StyleSheet, 
   Text, 
   View, 
-  SafeAreaView, 
   TouchableOpacity, 
   FlatList, 
   Platform, 
@@ -11,6 +10,7 @@ import {
   ActivityIndicator,
   Dimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch } from '../api/client';
 import * as Location from 'expo-location';
 import MapView, { Marker, Callout } from 'react-native-maps';
@@ -210,7 +210,7 @@ export default function MapScreen({ route, navigation }: MapScreenProps) {
   }).current;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.mainContainer}>
         
         {/* Floating Top Header Bar */}
