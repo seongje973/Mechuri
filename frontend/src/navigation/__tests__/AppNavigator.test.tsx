@@ -26,6 +26,7 @@ describe('AppNavigator 하단 탭', () => {
     );
     await waitFor(() => expect(screen.getByText('🏠 홈')).toBeTruthy());
     ['🍔 추천', '👥 같이', '📍 지도', '👤 내정보'].forEach((label) => expect(screen.getByText(label)).toBeTruthy());
+    expect(screen.queryByText('월드컵')).toBeNull();
     expect(screen.queryByText('🏆 월드컵')).toBeNull();
   });
 });
