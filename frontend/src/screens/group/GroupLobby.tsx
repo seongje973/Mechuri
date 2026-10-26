@@ -54,7 +54,7 @@ export default function GroupLobby({ state, me, onReady, onStart, onLeave }: Pro
           return (
             <View key={p.id} style={styles.person}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{p.nickname.slice(0, 1)}</Text>
+                <Text style={styles.avatarText}>{Array.from(p.nickname)[0] ?? ''}</Text>
               </View>
               <Text style={styles.name}>{p.nickname}{p.id === me ? ' (나)' : ''}</Text>
               <View style={[styles.statusPill, (p.ready || p.id === state.hostId) && p.connected && styles.statusOn, !p.connected && styles.statusOff]}>

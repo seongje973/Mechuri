@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -76,8 +76,11 @@ export default function MyPageScreen({
   const [histories, setHistories] = useState<HistoryEntry[]>([]);
   const [avoidTags, setAvoidTagsState] = useState<string[]>([]);
   const [prefs, setPrefs] = useState<TastePreferences>(EMPTY_PREFERENCES);
+  // 가장 최근 조회만 반영한다. 로그아웃·계정 변경 전에 시작한 조회가 늦게 끝나도 덮어쓰지 않게
+  const loadSeq = useRef(0);
 
   const loadUserData = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     const [statsResult, historyResult, tagResult, prefResult] = await Promise.allSettled([
       getStats(),
@@ -85,6 +88,7 @@ export default function MyPageScreen({
       getAvoidTags(),
       getPreferences(),
     ]);
+    if (seq !== loadSeq.current) return;
     if (statsResult.status === 'fulfilled') setStats(statsResult.value);
     else console.log('❌ Error loading MyPage stats:', statsResult.reason);
     if (historyResult.status === 'fulfilled') setHistories(historyResult.value);
@@ -92,6 +96,16 @@ export default function MyPageScreen({
     if (prefResult.status === 'fulfilled') setPrefs(prefResult.value ?? EMPTY_PREFERENCES);
     setLoading(false);
   }, []);
+
+  // 계정이 바뀌면 이전 계정의 기록이 남지 않게 비우고, 진행 중인 조회는 무시한다.
+  // 아래 조회 effect보다 먼저 선언해야 새 조회 순번이 이 무효화 뒤에 매겨진다
+  useEffect(() => {
+    loadSeq.current += 1;
+    setStats({ eatenCount: 0, favoritesCount: 0, avoidCount: 0 });
+    setHistories([]);
+    setAvoidTagsState([]);
+    setPrefs(EMPTY_PREFERENCES);
+  }, [isGuest, userProfile]);
 
   // 탭에 들어올 때마다 새로 읽는다 (다른 화면에서 기록·최애가 늘었을 수 있음)
   useEffect(() => {
