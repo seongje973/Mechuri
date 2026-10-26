@@ -7,9 +7,11 @@ import {
   getAvoidTags,
   getFavorites,
   getHistories,
+  getPreferences,
   getStats,
   importGuestData,
   setAvoidTags,
+  setPreferences,
   toggleFavorite,
 } from '../userData';
 import { onLoginPrompt, snoozeLoginPrompt } from '../loginPrompt';
@@ -89,6 +91,7 @@ describe('게스트 저장소', () => {
       histories: 1,
       favorites: 1,
       avoidTags: ['매운맛', '오이'],
+      preferences: null,
     });
 
     const [url, init] = fetchMock.mock.calls[0];
@@ -99,12 +102,62 @@ describe('게스트 저장소', () => {
     expect(body.histories.map((h: any) => h.menuName)).toEqual(['김치찌개']);
     expect(body.favorites.map((f: any) => f.menuName)).toEqual(['초밥']);
     expect(body.avoidTags).toEqual(['오이']);
+    expect(body.preferences).toBeNull();
 
     for (const key of Object.values(GUEST_KEYS)) expect(await AsyncStorage.getItem(key)).toBeNull();
 
     // 옮길 것이 없으면 다시 부르지 않는다
     await expect(importGuestData()).resolves.toMatchObject({ imported: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('게스트 취향은 기기에 저장하고, 한 번도 설정하지 않았으면 null', async () => {
+    expect(await getPreferences()).toBeNull();
+    await setPreferences({ likedCuisines: ['일식', '한식'], spicy: 'hot' });
+    expect(await getPreferences()).toEqual({ likedCuisines: ['한식', '일식'], spicy: 'hot' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('게스트 취향만 있어도 로그인하면 옮기고, 서버가 돌려준 계정 취향을 쓴다', async () => {
+    await setPreferences({ likedCuisines: ['중식'], spicy: 'mild' });
+    await saveSession('jwt-1', { id: 1 });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        imported: { histories: 0, favorites: 0 },
+        avoidTags: '',
+        preferences: { likedCuisines: ['양식'], spicy: null },
+      }),
+    });
+
+    await expect(importGuestData()).resolves.toMatchObject({
+      imported: true,
+      preferences: { likedCuisines: ['양식'], spicy: null },
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).preferences).toEqual({ likedCuisines: ['중식'], spicy: 'mild' });
+    expect(await AsyncStorage.getItem(GUEST_KEYS.preferences)).toBeNull();
+  });
+
+  it('로그인 상태의 취향은 서버 /api/user/preferences를 쓴다', async () => {
+    await saveSession('jwt-1', { id: 1 });
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ preferences: null }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ preferences: { likedCuisines: ['분식'], spicy: 'normal' } }),
+      });
+
+    expect(await getPreferences()).toBeNull();
+    await expect(setPreferences({ likedCuisines: ['분식'], spicy: 'normal' })).resolves.toEqual({
+      likedCuisines: ['분식'],
+      spicy: 'normal',
+    });
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toMatch(/\/api\/user\/preferences$/);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body)).toEqual({ preferences: { likedCuisines: ['분식'], spicy: 'normal' } });
   });
 
   it('저장 중이던 게스트 기록도 이관에 포함한다', async () => {

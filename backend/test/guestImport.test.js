@@ -24,7 +24,7 @@ test('payload is cleaned: blank menus dropped, bad or future dates become now, t
   assert.strictEqual(payload.histories[1].emoji, null);
   assert.deepStrictEqual(payload.favorites.map(f => f.menuName), ['초밥']);
   assert.deepStrictEqual(payload.avoidTags, ['오이', '가지']);
-  assert.deepStrictEqual(normalizeImportPayload({}, now), { histories: [], favorites: [], avoidTags: [] });
+  assert.deepStrictEqual(normalizeImportPayload({}, now), { histories: [], favorites: [], avoidTags: [], preferences: null });
 });
 
 test('payload with wrong shapes or too many items is rejected', () => {
@@ -68,4 +68,14 @@ test('importing the same guest data twice adds nothing the second time', () => {
   assert.strictEqual(second.histories.length, 0);
   assert.strictEqual(second.favorites.length, 0);
   assert.strictEqual(second.avoidTags, '오이');
+});
+
+test('guest preferences are used only when the account has none', () => {
+  const guest = normalizeImportPayload({ preferences: { likedCuisines: ['일식'], spicy: 'hot' } }, now);
+  assert.deepStrictEqual(planImport(guest, {}).preferences, { likedCuisines: ['일식'], spicy: 'hot' });
+
+  const account = { likedCuisines: ['한식'], spicy: 'mild' };
+  assert.deepStrictEqual(planImport(guest, { preferences: account }).preferences, account);
+  assert.strictEqual(planImport(normalizeImportPayload({}, now), {}).preferences, null);
+  assert.throws(() => normalizeImportPayload({ preferences: { spicy: 'very' } }), ImportError);
 });

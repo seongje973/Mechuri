@@ -65,3 +65,12 @@ export const mergeAdjustments = (...list: Record<string, number>[]): Record<stri
     });
     return acc;
   }, {});
+
+/** 이유 칩 여러 묶음을 합친다. 앞에 넘긴 묶음의 이유가 먼저 온다 */
+export const mergeReasons = (...list: Record<string, string | string[]>[]): Record<string, string[]> =>
+  list.reduce<Record<string, string[]>>((acc, reasons) => {
+    Object.entries(reasons).forEach(([name, value]) => {
+      acc[name] = Array.from(new Set([...(acc[name] ?? []), ...([] as string[]).concat(value)]));
+    });
+    return acc;
+  }, {});

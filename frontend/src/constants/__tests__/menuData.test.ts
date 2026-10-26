@@ -12,7 +12,7 @@ const ALLOWED = {
   price: ['low', 'mid', 'high'],
   serving: ['dine_in', 'delivery', 'both'],
   party: ['solo', 'group'],
-  avoidTags: ['밀가루', '해산물', '날것', '오이', '가지'],
+  avoidTags: ['밀가루', '메밀', '유제품', '달걀', '갑각류', '해산물', '견과류', '날것', '돼지고기', '소고기', '닭고기', '오이', '가지', '고수'],
 };
 
 describe('메뉴 데이터 v2', () => {

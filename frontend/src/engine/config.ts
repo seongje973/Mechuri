@@ -51,3 +51,17 @@ export const COLD_DAY_TEMP = 5;
 /** 늦은 밤: 22시 ~ 다음 날 4시 */
 export const LATE_NIGHT_START_HOUR = 22;
 export const LATE_NIGHT_END_HOUR = 4;
+
+/** 취향 설정에서 고른 좋아하는 나라별 음식 보너스 */
+export const LIKED_CUISINE_BONUS = 1;
+/** 기록에서 배운 "요즘 자주 먹는" 나라별 음식 보너스. 직접 고른 취향보다 약하게 */
+export const LEARNED_CUISINE_BONUS = 0.5;
+/** 최근 이 기간의 식사 기록으로 자주 먹는 나라별 음식을 찾는다 */
+export const LEARN_DAYS = 30;
+/** 기록이 이만큼은 있어야 배운다 */
+export const LEARN_MIN_MEALS = 3;
+/** 이 비율 이상 먹은 나라별 음식만 "자주 먹는" 것으로 본다 */
+export const LEARN_MIN_SHARE = 0.4;
+/** 매운맛 취향: "매운 거 좋아요"면 맵기 2 이상 메뉴 보너스, "안 매운 게 좋아요"면 맵기 1당 감점 */
+export const SPICY_LOVER_BONUS = 1;
+export const SPICY_MILD_PENALTY_PER_LEVEL = -0.5;

@@ -3,7 +3,7 @@
  * - error: 누락·이상값·중복. 하나라도 있으면 실패(exit 1)
  * - warning: 기준표상 어색한 조합. 사람이 한 번 확인하면 되는 것
  */
-import { MENU_DATA, CUISINES, MenuItem } from '../src/constants/menuData';
+import { MENU_DATA, CUISINES, MenuItem, AVOID_TAG_OPTIONS } from '../src/constants/menuData';
 
 export const MIN_MENUS = 100;
 export const MIN_PER_CUISINE = 8;
@@ -17,7 +17,7 @@ const ALLOWED: Record<string, readonly unknown[]> = {
   serving: ['dine_in', 'delivery', 'both'],
   party: ['solo', 'group'],
 };
-const AVOID_TAGS = ['밀가루', '해산물', '날것', '오이', '가지'];
+const AVOID_TAGS: string[] = AVOID_TAG_OPTIONS.filter(tag => tag !== '매운맛');
 /** 면·반죽이지만 밀가루가 없는 메뉴 (쌀국수류, 순메밀, 쌀가루 반죽). 기준표 10번 */
 const WHEAT_FREE = ['쌀국수', '팟타이', '메밀소바', '분짜', '락사', '반쎄오'];
 
@@ -54,6 +54,7 @@ export const checkMenu = (data: MenuItem[] = MENU_DATA): MenuIssue[] => {
 
       const tags = item.avoidTags as string[];
       if (tags.includes('날것') && item.temperature === 'hot') warn(menu, "'날것'인데 온도가 hot");
+      if (tags.includes('갑각류') && !tags.includes('해산물')) error(menu, "'갑각류'는 해산물이므로 '해산물'도 붙여야 함");
       if ((item.base === 'noodle' || item.base === 'bread') && !tags.includes('밀가루') && !WHEAT_FREE.includes(item.name)) {
         warn(menu, "면·반죽 요리인데 '밀가루' 태그가 없음 (밀가루가 없는 메뉴면 WHEAT_FREE에 추가)");
       }
