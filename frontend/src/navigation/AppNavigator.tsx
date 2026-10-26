@@ -3,9 +3,10 @@ import { Platform, View, ActivityIndicator, Linking, Alert } from 'react-native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { apiFetch, clearSession, getAuthToken, getStoredProfile, saveProfile, saveSession } from '../api/client';
 import { exchangeKakaoLoginCode } from '../api/kakaoLogin';
-import { importGuestData } from '../storage/userData';
+import { getPreferences, importGuestData } from '../storage/userData';
 import { LoginPromptReason, onLoginPrompt, snoozeLoginPrompt } from '../storage/loginPrompt';
 import LoginSheet from '../components/LoginSheet';
+import TasteSheet from '../components/TasteSheet';
 import { parseRoomCodeFromUrl } from '../api/rooms';
 import { navigationRef } from './navigationRef';
 
@@ -25,6 +26,8 @@ export default function AppNavigator() {
   // 같이 정하기 초대 링크 (mechuri://room/CODE)
   const [invite, setInvite] = useState<{ code: string; at: number } | null>(null);
   const [loginPrompt, setLoginPrompt] = useState<LoginPromptReason | null>(null);
+  // 로그인 직후, 계정에 취향 설정이 아직 없으면 알레르기·취향 시트를 한 번 띄운다
+  const [tasteSheetOpen, setTasteSheetOpen] = useState(false);
   const isLoggedInRef = useRef(isLoggedIn);
   useEffect(() => {
     isLoggedInRef.current = isLoggedIn;
@@ -61,6 +64,21 @@ export default function AppNavigator() {
     const updated = await migrateGuestData(profile, true);
     setUserProfile(updated);
     setIsLoggedIn(true);
+    try {
+      // 게스트 때 설정한 취향은 방금 옮겨졌으므로 그것도 없을 때만 묻는다
+      if ((await getPreferences()) === null) setTasteSheetOpen(true);
+    } catch (e) {
+      console.log('⚠️ Could not load preferences after login:', e);
+    }
+  };
+
+  // 시트에서 저장한 기피 태그를 프로필에도 반영한다 (같이 정하기 참가 때 기본값)
+  const handleTasteSaved = async (avoidTags: string[]) => {
+    const profile = await getStoredProfile();
+    if (!profile) return;
+    const updated = { ...profile, avoidTags: avoidTags.join(',') };
+    await saveProfile(updated);
+    setUserProfile(updated);
   };
 
   // Check login session on mount
@@ -313,6 +331,14 @@ export default function AppNavigator() {
         onDismiss={handleDismissLoginPrompt}
         onClose={() => setLoginPrompt(null)}
         onLoggedIn={handleLoginSuccess}
+      />
+      <TasteSheet
+        visible={tasteSheetOpen}
+        mode="login"
+        onClose={() => setTasteSheetOpen(false)}
+        onSaved={avoidTags => {
+          handleTasteSaved(avoidTags).catch(() => {});
+        }}
       />
     </>
   );

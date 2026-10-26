@@ -5,6 +5,8 @@ const MAX_FAVORITES = 200;
 const MAX_AVOID_TAGS = 20;
 const MAX_TEXT = 100;
 
+const { PreferencesError, normalizePreferences } = require('./preferences');
+
 class ImportError extends Error {}
 
 const text = (value, max = MAX_TEXT) => {
@@ -58,7 +60,17 @@ const normalizeImportPayload = (body, now = new Date()) => {
   const avoidTags = parseTags(body.avoidTags);
   if (avoidTags.length > MAX_AVOID_TAGS) throw new ImportError(`avoidTags can have at most ${MAX_AVOID_TAGS} items.`);
 
-  return { histories, favorites, avoidTags };
+  let preferences = null;
+  if (body.preferences !== undefined && body.preferences !== null) {
+    try {
+      preferences = normalizePreferences(body.preferences);
+    } catch (error) {
+      if (error instanceof PreferencesError) throw new ImportError(error.message);
+      throw error;
+    }
+  }
+
+  return { histories, favorites, avoidTags, preferences };
 };
 
 const historyKey = h => `${h.menuName}@${new Date(h.createdAt).getTime()}`;
@@ -68,6 +80,7 @@ const historyKey = h => `${h.menuName}@${new Date(h.createdAt).getTime()}`;
  * - 즐겨찾기: 같은 메뉴는 하나만 (중복 메뉴 합치기)
  * - 식사 기록: 같은 메뉴·같은 시각이면 같은 기록으로 본다. 이관 응답을 못 받아 다시 보내도 두 번 저장되지 않는다
  * - 기피 태그: 합집합
+ * - 취향 설정: 계정에 이미 있으면 계정 것을 두고, 없을 때만 게스트 것을 쓴다
  */
 const planImport = (payload, existing) => {
   const seenHistories = new Set((existing.histories || []).map(historyKey));
@@ -88,7 +101,8 @@ const planImport = (payload, existing) => {
   }
 
   const avoidTags = parseTags([...parseTags(existing.avoidTags), ...payload.avoidTags]).join(',');
-  return { histories, favorites, avoidTags };
+  const preferences = existing.preferences || payload.preferences || null;
+  return { histories, favorites, avoidTags, preferences };
 };
 
 module.exports = {

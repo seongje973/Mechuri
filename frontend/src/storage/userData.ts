@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch, getAuthToken } from '../api/client';
 import { notifyFavoriteSaved } from './loginPrompt';
+import { TastePreferences, normalizePreferences } from '../engine/preferences';
 
 /**
- * 식사 기록·즐겨찾기·기피 태그 저장소. 화면은 로그인 여부를 몰라도 된다.
+ * 식사 기록·즐겨찾기·기피 태그·취향 설정 저장소. 화면은 로그인 여부를 몰라도 된다.
  * - 로그인(토큰 있음): 서버 /api/user/* 에 저장
  * - 게스트(토큰 없음): 이 기기(AsyncStorage)에 저장. 서버를 부르지 않으므로 401도 없다
  * 로그인하면 importGuestData()가 기기 기록을 서버로 옮기고 기기 쪽을 비운다.
@@ -38,6 +39,7 @@ export const GUEST_KEYS = {
   histories: 'guest_histories',
   favorites: 'guest_favorites',
   avoidTags: 'guest_avoid_tags',
+  preferences: 'guest_preferences',
 } as const;
 
 /** 서버도 최근 50개만 돌려준다 */
@@ -200,6 +202,35 @@ export const setAvoidTags = async (tags: string[]): Promise<string[]> => {
   return parseAvoidTags(data.avoidTags);
 };
 
+// --- 취향 설정 ---
+
+/** 한 번도 설정하지 않았으면 null. 로그인 직후 이 값으로 설정 화면을 띄울지 정한다 */
+export const getPreferences = async (): Promise<TastePreferences | null> => {
+  if (await isGuest()) {
+    const raw = await AsyncStorage.getItem(GUEST_KEYS.preferences);
+    if (!raw) return null;
+    try {
+      return normalizePreferences(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }
+  const data = await requestJson('/api/user/preferences');
+  return data.preferences ? normalizePreferences(data.preferences) : null;
+};
+
+export const setPreferences = async (preferences: TastePreferences): Promise<TastePreferences> => {
+  const clean = normalizePreferences(preferences);
+  const guest = await whenGuest(() => AsyncStorage.setItem(GUEST_KEYS.preferences, JSON.stringify(clean)));
+  if (guest) return clean;
+  const data = await requestJson('/api/user/preferences', {
+    method: 'PUT',
+    body: { preferences: clean },
+    timeoutMs: WRITE_TIMEOUT_MS,
+  });
+  return normalizePreferences(data.preferences);
+};
+
 // --- 통계 ---
 
 export const getStats = async (): Promise<UserStats> => {
@@ -219,6 +250,8 @@ export interface GuestImportResult {
   favorites: number;
   /** 서버에 저장된 합집합 기피 태그 (옮겼을 때만) */
   avoidTags?: string[];
+  /** 계정의 취향 설정. 계정에 없었으면 게스트 것 (옮겼을 때만) */
+  preferences?: TastePreferences | null;
 }
 
 /**
@@ -229,18 +262,30 @@ export const importGuestData = (): Promise<GuestImportResult> => withGuestLock(a
   const none = { imported: false, histories: 0, favorites: 0 };
   if (await isGuest()) return none;
 
-  const [histories, favorites, rawTags] = await Promise.all([
+  const [histories, favorites, rawTags, rawPreferences] = await Promise.all([
     // 읽지 못한 목록을 빈 목록으로 보고 지워 버리지 않도록 오류를 그대로 던진다
     readListStrict<HistoryEntry>(GUEST_KEYS.histories),
     readListStrict<FavoriteEntry>(GUEST_KEYS.favorites),
     AsyncStorage.getItem(GUEST_KEYS.avoidTags),
+    AsyncStorage.getItem(GUEST_KEYS.preferences),
   ]);
   const avoidTags = parseAvoidTags(rawTags);
-  if (!histories.length && !favorites.length && !avoidTags.length) return none;
+  // 취향은 JSON 하나라서 깨졌으면 옮기지 않고 버린다
+  let preferences: TastePreferences | null = null;
+  try {
+    preferences = rawPreferences ? normalizePreferences(JSON.parse(rawPreferences)) : null;
+  } catch {
+    preferences = null;
+  }
+  if (!histories.length && !favorites.length && !avoidTags.length && !preferences) {
+    // 깨진 취향 값만 남아 있었으면 지워서 다음 실행 때 다시 읽지 않게
+    if (rawPreferences) await AsyncStorage.removeItem(GUEST_KEYS.preferences);
+    return none;
+  }
 
   const data = await requestJson('/api/user/import', {
     method: 'POST',
-    body: { histories, favorites, avoidTags },
+    body: { histories, favorites, avoidTags, preferences },
     timeoutMs: 10000,
   });
   await AsyncStorage.multiRemove(Object.values(GUEST_KEYS));
@@ -250,6 +295,7 @@ export const importGuestData = (): Promise<GuestImportResult> => withGuestLock(a
     histories: data.imported?.histories ?? 0,
     favorites: data.imported?.favorites ?? 0,
     avoidTags: parseAvoidTags(data.avoidTags),
+    preferences: data.preferences ? normalizePreferences(data.preferences) : null,
   };
 });
 

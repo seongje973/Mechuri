@@ -14,16 +14,14 @@ import {
 } from 'react-native';
 import { apiFetch, saveSession } from '../api/client';
 import { devKakaoLogin, openKakaoLogin } from '../api/kakaoLogin';
-import { AVOID_TAG_OPTIONS } from '../constants/menuData';
+import TasteSheet from '../components/TasteSheet';
 import {
   UserStats,
   clearHistories,
   deleteAccount,
-  getAvoidTags,
   getFavorites,
   getHistories,
-  getStats,
-  setAvoidTags
+  getStats
 } from '../storage/userData';
 import { requestLoginPrompt } from '../storage/loginPrompt';
 import { colors, fonts, radii } from '../theme';
@@ -51,7 +49,6 @@ export default function MyPageScreen({
 
   // Profile & Statistics state
   const [stats, setStats] = useState<UserStats>({ eatenCount: 0, favoritesCount: 0, avoidCount: 0 });
-  const [activeTags, setActiveTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Email Authentication Form state
@@ -65,9 +62,7 @@ export default function MyPageScreen({
   const loadUserData = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextStats, tags] = await Promise.all([getStats(), getAvoidTags()]);
-      setStats(nextStats);
-      setActiveTags(tags);
+      setStats(await getStats());
     } catch (error) {
       console.log('❌ Error loading MyPage stats:', error);
     } finally {
@@ -202,46 +197,8 @@ export default function MyPageScreen({
     }
   };
 
-  const handlePressAvoid = () => {
-    const toggleTag = async (tag: string) => {
-      const newTags = activeTags.includes(tag)
-        ? activeTags.filter(t => t !== tag)
-        : [...activeTags, tag];
-      try {
-        const saved = await setAvoidTags(newTags);
-        setActiveTags(saved);
-        loadUserData();
-        Alert.alert("필터 수정 완료 🐣", `기피 태그가 저장되었습니다: [${saved.join(', ') || '없음'}]`);
-      } catch (e) {
-        Alert.alert("에러", "기피 설정을 변경하지 못했습니다.");
-      }
-    };
-
-    const buttons = AVOID_TAG_OPTIONS.map(tag => ({
-      text: `${activeTags.includes(tag) ? '✅' : '⬜'} ${tag}`,
-      onPress: () => toggleTag(tag)
-    }));
-    const message = `여기 설정된 성분이 포함된 메뉴는 추천 결과에서 빠져요.\n\n현재 기피 성분: [${activeTags.join(', ') || '없음'}]`;
-
-    const showPage3 = () => {
-      Alert.alert("🚫 알레르기 및 기피 설정 (3/3)", message, [
-        ...buttons.slice(4, 6),
-        { text: "닫기", style: "cancel" }
-      ]);
-    };
-
-    const showPage2 = () => {
-      Alert.alert("🚫 알레르기 및 기피 설정 (2/3)", message, [
-        ...buttons.slice(2, 4),
-        { text: "다음 ➔", onPress: showPage3 }
-      ]);
-    };
-
-    Alert.alert("🚫 알레르기 및 기피 설정 (1/3)", message, [
-      ...buttons.slice(0, 2),
-      { text: "다음 ➔", onPress: showPage2 }
-    ]);
-  };
+  const [tasteOpen, setTasteOpen] = useState(false);
+  const handlePressAvoid = () => setTasteOpen(true);
 
   const handlePressHistory = async () => {
     try {
@@ -428,7 +385,7 @@ export default function MyPageScreen({
             </TouchableOpacity>
             <TouchableOpacity style={styles.statBox} onPress={handlePressAvoid}>
               <Text style={styles.statNumber}>{stats.avoidCount}</Text>
-              <Text style={styles.statLabel}>기피 필터 🚫</Text>
+              <Text style={styles.statLabel}>알레르기·기피 🚫</Text>
             </TouchableOpacity>
           </View>
 
@@ -441,7 +398,7 @@ export default function MyPageScreen({
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={handlePressAvoid}>
-            <Text style={styles.menuText}>🚫 알레르기 유발 및 오이/가지 기피 차단</Text>
+            <Text style={styles.menuText}>🚫 알레르기·안 먹는 음식·좋아하는 음식 설정</Text>
             <Text style={styles.arrow}>➔</Text>
           </TouchableOpacity>
 
@@ -465,6 +422,7 @@ export default function MyPageScreen({
           <Text style={styles.versionText}>버전 정보 v1.2.0</Text>
         </ScrollView>
       </KeyboardAvoidingView>
+      <TasteSheet visible={tasteOpen} mode="edit" onClose={() => setTasteOpen(false)} onSaved={() => loadUserData()} />
     </SafeAreaView>
   );
 }

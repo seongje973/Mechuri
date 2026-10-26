@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { AVOID_TAG_OPTIONS } from '../../constants/menuData';
 import { ROOM_CODE_LENGTH, RoomApiError, RoomMembership, createRoom, getRoom, joinRoom, normalizeRoomCode } from '../../api/rooms';
+import { getAvoidTags } from '../../storage/userData';
 import { colors, fonts } from '../../theme';
 import { gs } from './groupTheme';
 
@@ -26,6 +27,21 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
   const [error, setError] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
+  // 마이페이지·로그인 직후에 저장한 알레르기·기피 태그를 기본으로 골라 둔다 (게스트는 기기 값).
+  // 읽는 사이 사용자가 이미 칩을 눌렀으면 덮어쓰지 않는다
+  const touchedRef = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    getAvoidTags()
+      .then(saved => {
+        if (alive && !touchedRef.current && saved.length > 0) setAvoidTags(prev => Array.from(new Set([...prev, ...saved])));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // 초대 링크로 왔으면 방이 살아 있는지 먼저 알려준다 (만료된 링크 안내, US-30)
   useEffect(() => {
     if (!inviteCode) return;
@@ -35,8 +51,10 @@ export default function GroupEntry({ userProfile, inviteCode, notice, onEntered 
       setInviteError(e instanceof RoomApiError ? e.message : '방 상태를 확인할 수 없어요. 코드를 확인하고 다시 시도해 주세요.'));
   }, [inviteCode]);
 
-  const toggleTag = (tag: string) =>
+  const toggleTag = (tag: string) => {
+    touchedRef.current = true;
     setAvoidTags(prev => (prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]));
+  };
 
   const trimmed = nickname.trim();
   const normalizedCode = normalizeRoomCode(code);

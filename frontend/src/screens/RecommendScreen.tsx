@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
-import { addHistory, getAvoidTags, getFavorites, getHistories, isFavorite, toggleFavorite } from '../storage/userData';
+import { addHistory, getAvoidTags, getFavorites, getHistories, getPreferences, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { colors, fonts } from '../theme';
@@ -42,7 +42,8 @@ import {
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
 import { personalAdjustments } from '../engine/personalize';
-import { RecommendContext, contextAdjustments, mergeAdjustments } from '../engine/context';
+import { RecommendContext, contextAdjustments, mergeAdjustments, mergeReasons } from '../engine/context';
+import { EMPTY_PREFERENCES, preferenceAdjustments } from '../engine/preferences';
 
 
 const ANSWER_BUTTONS: { answer: ScoreAnswer; label: string }[] = [
@@ -92,7 +93,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   // 결과 계산에 쓴 개인화 보정. "틀렸어요" 뒤 다시 계산할 때도 같은 값을 쓴다
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
-  const [contextReasons, setContextReasons] = useState<Record<string, string>>({});
+  const [contextReasons, setContextReasons] = useState<Record<string, string[]>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
   // 추천을 시작할 때 미리 받아 두는 날씨 (L-02). 못 받으면 시간대만 쓴다
   const weatherRef = useRef<RecommendContext['weather']>(null);
@@ -323,16 +324,25 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     clearTimeout(timer);
   };
 
-  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21). 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
-  const loadAdjustments = async (): Promise<Record<string, number>> => {
+  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21), 취향 설정과 기록에서 배운 취향.
+  // 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
+  const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]> }> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
-    const [histories, favorites] = await Promise.allSettled([getHistories(), getFavorites()]);
+    const [histories, favorites, preferences] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences()]);
     if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
     if (favorites.status === 'rejected') console.log("Failed to load favorites for adjustments", favorites.reason);
-    return personalAdjustments({
-      histories: histories.status === 'fulfilled' ? histories.value : [],
+    if (preferences.status === 'rejected') console.log("Failed to load preferences for adjustments", preferences.reason);
+    const meals = histories.status === 'fulfilled' ? histories.value : [];
+    const taste = preferenceAdjustments(
+      MENU_DATA,
+      (preferences.status === 'fulfilled' && preferences.value) || EMPTY_PREFERENCES,
+      meals
+    );
+    const personal = personalAdjustments({
+      histories: meals,
       favorites: favorites.status === 'fulfilled' ? favorites.value : [],
     });
+    return { adjustments: mergeAdjustments(personal, taste.adjustments), reasons: taste.reasons };
   };
 
   const showResults = (ranked: RecommendResult[], finalSession: RecommendSession | null, via?: 'worldcup') => {
@@ -384,8 +394,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         analyticsSessionRef.current !== analyticsSession ||
         startRequestRef.current !== startRequest
       ) return;
-      adj = mergeAdjustments(personal, context.adjustments);
-      reasons = context.reasons;
+      adj = mergeAdjustments(personal.adjustments, context.adjustments);
+      reasons = mergeReasons(context.reasons, personal.reasons);
       setAdjustments(adj);
       setContextReasons(reasons);
     }

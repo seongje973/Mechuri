@@ -19,6 +19,7 @@ jest.mock('../../storage/userData', () => ({
   getAvoidTags: jest.fn(async () => []),
   getFavorites: jest.fn(async () => []),
   getHistories: jest.fn(async () => []),
+  getPreferences: jest.fn(async () => null),
   isFavorite: jest.fn(async () => false),
   toggleFavorite: jest.fn(async () => ({ favorited: true, count: 1 })),
 }));

@@ -9,6 +9,7 @@ const Event = require('../models/Event');
 const Participant = require('../models/Participant');
 const { ImportError, normalizeImportPayload, planImport } = require('../user/guestImport');
 const { deleteAccount } = require('../user/deleteAccount');
+const { PreferencesError, normalizePreferences, readPreferences } = require('../user/preferences');
 
 // Apply authMiddleware to all routes here
 router.use(authMiddleware);
@@ -178,6 +179,37 @@ router.put('/avoid-tags', async (req, res) => {
   }
 });
 
+// 9-1. GET User Preferences (취향 설정. 한 번도 설정하지 않았으면 null)
+router.get('/preferences', async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    return res.json({ preferences: readPreferences(user.preferences) });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to retrieve preferences.' });
+  }
+});
+
+// 9-2. PUT User Preferences { preferences: { likedCuisines, spicy } }
+router.put('/preferences', async (req, res) => {
+  let preferences;
+  try {
+    preferences = normalizePreferences(req.body && req.body.preferences);
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof PreferencesError ? error.message : 'Invalid preferences.' });
+  }
+  try {
+    const user = await User.findByPk(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    user.preferences = preferences;
+    await user.save();
+    return res.json({ preferences });
+  } catch (error) {
+    console.error('❌ Preferences Update Error:', error.message);
+    return res.status(500).json({ error: 'Failed to update preferences.' });
+  }
+});
+
 // 10. POST Import guest data (로그인 직후 기기에 있던 게스트 기록을 계정으로 옮긴다)
 router.post('/import', async (req, res) => {
   let payload;
@@ -202,16 +234,23 @@ router.post('/import', async (req, res) => {
       const plan = planImport(payload, {
         histories: existingHistories,
         favorites: existingFavorites,
-        avoidTags: user.avoidTags
+        avoidTags: user.avoidTags,
+        preferences: readPreferences(user.preferences)
       });
 
       // createdAt은 게스트가 실제로 먹은 시각을 그대로 둔다
       await History.bulkCreate(plan.histories.map(h => ({ ...h, userId })), { transaction, silent: true });
       await Favorite.bulkCreate(plan.favorites.map(f => ({ ...f, userId })), { transaction, silent: true });
       user.avoidTags = plan.avoidTags;
+      user.preferences = plan.preferences;
       await user.save({ transaction });
 
-      return { histories: plan.histories.length, favorites: plan.favorites.length, avoidTags: user.avoidTags };
+      return {
+        histories: plan.histories.length,
+        favorites: plan.favorites.length,
+        avoidTags: user.avoidTags,
+        preferences: plan.preferences
+      };
     });
 
     if (!result) return res.status(404).json({ error: 'User not found.' });
@@ -219,7 +258,8 @@ router.post('/import', async (req, res) => {
     return res.json({
       message: 'Guest data imported successfully! 🐣',
       imported: { histories: result.histories, favorites: result.favorites },
-      avoidTags: result.avoidTags
+      avoidTags: result.avoidTags,
+      preferences: result.preferences
     });
   } catch (error) {
     console.error('❌ Guest Import Error:', error.message);
