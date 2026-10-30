@@ -1,143 +1,125 @@
 # CLAUDE.md
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+Mechuri(메추리)는 질문 몇 개에 답하면 오늘 먹을 메뉴를 골라 주는 "메뉴 추천" 앱이다. `frontend/`는 Expo SDK 54 + React Native 0.81 + TypeScript, `backend/`는 Node 20 + Express + Sequelize + PostgreSQL이다. 이 문서에는 꼭 지켜야 하는 규칙만 둔다. 설치와 실행은 `README.md`, 배포는 `docs/deploy.md`를 본다.
 
-Tradeoff: These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## 작업 원칙
 
-## Think Before Coding
-Don't assume. Don't hide confusion. Surface tradeoffs.
+속도보다 신중함을 우선한다. 아주 작은 작업은 판단해서 가볍게 처리한다.
 
-Before implementing:
+### 먼저 생각한다
 
-State your assumptions explicitly. If uncertain, ask.
-If multiple interpretations exist, present them - don't pick silently.
-If a simpler approach exists, say so. Push back when warranted.
-If something is unclear, stop. Name what's confusing. Ask.
-Answer directly without unnecessary greetings.
-Uncertain facts, dates, figures, and sources are first described as uncertain.
-Keep simple questions brief and answer complex tasks in sufficient detail.
+추측하지 않는다. 헷갈리는 점을 숨기지 않는다. 장단점을 드러낸다.
 
-## Simplicity First
-Minimum code that solves the problem. Nothing speculative.
+- 구현 전에 가정을 분명히 말한다. 확실하지 않으면 묻는다.
+- 해석이 여러 가지면 하나를 몰래 고르지 말고 선택지를 보여 준다.
+- 더 단순한 방법이 있으면 말하고, 필요하면 반대 의견을 낸다.
+- 불분명하면 멈추고, 무엇이 헷갈리는지 짚어서 묻는다.
+- 불필요한 인사 없이 바로 답한다. 간단한 질문은 짧게, 복잡한 작업은 충분히 자세히 답한다.
+- 확실하지 않은 사실·날짜·수치·출처는 확실하지 않다고 먼저 밝힌다.
 
-No features beyond what was asked.
-No abstractions for single-use code.
-No "flexibility" or "configurability" that wasn't requested.
-No error handling for impossible scenarios.
-If you write 200 lines and it could be 50, rewrite it.
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+### 단순하게 만든다
 
-3. Surgical Changes
-Touch only what you must. Clean up only your own mess.
+문제를 푸는 최소한의 코드만 쓴다. 추측으로 미리 만들지 않는다.
 
-When editing existing code:
+- 요청하지 않은 기능, 한 번만 쓰는 추상화, 요청하지 않은 "유연성"·설정 옵션, 일어날 수 없는 경우의 예외 처리를 넣지 않는다.
+- 200줄로 쓴 것이 50줄로 될 수 있으면 다시 쓴다. "시니어 엔지니어가 보면 과하다고 할까?"를 묻고, 그렇다면 줄인다.
+- 새로 만들기 전에 있는 것을 찾는다. 컴포넌트는 `src/components/`, 색·글꼴은 `src/theme/`, 스크립트는 각 `package.json`에 이미 있는지 먼저 본다. 임시 빌드·테스트 스크립트를 따로 만들지 않는다.
 
-Don't "improve" adjacent code, comments, or formatting.
-Don't refactor things that aren't broken.
-Match existing style, even if you'd do it differently.
-If you notice unrelated dead code, mention it - don't delete it.
-When your changes create orphans:
+### 필요한 곳만 고친다
 
-Remove imports/variables/functions that YOUR changes made unused.
-Don't remove pre-existing dead code unless asked.
-The test: Every changed line should trace directly to the user's request.
+꼭 필요한 부분만 건드리고, 내가 만든 흔적만 정리한다.
 
-Do not modify files, paragraphs, or structures that the user has not requested.
-For major changes, deletions, overwrites, or external transfers, explain what will be changed first and obtain confirmation.
-At the end of the work, briefly summarize the changes and any points that need confirmation.
+- 주변 코드·주석·포맷을 "개선"하지 않는다. 고장 나지 않은 것은 리팩터링하지 않는다. 내 취향과 달라도 기존 스타일을 따른다.
+- 관련 없는 죽은 코드는 지우지 말고 알린다. 내 변경으로 안 쓰게 된 import·변수·함수만 지운다.
+- 요청받지 않은 파일·문단·구조는 바꾸지 않는다. 바뀐 줄은 모두 요청으로 설명할 수 있어야 한다.
+- 큰 변경, 삭제, 덮어쓰기, 외부 전송은 무엇을 바꿀지 먼저 설명하고 확인을 받는다.
+- 작업이 끝나면 바뀐 점과 확인이 필요한 점을 짧게 정리한다.
 
-## Goal-Driven Execution
-Define success criteria. Loop until verified.
+### 목표를 정하고 검증으로 끝낸다
 
-Transform tasks into verifiable goals:
+성공 기준을 정하고, 검증될 때까지 반복한다.
 
-"Add validation" → "Write tests for invalid inputs, then make them pass"
-"Fix the bug" → "Write a test that reproduces it, then make it pass"
-"Refactor X" → "Ensure tests pass before and after"
-For multi-step tasks, state a brief plan:
+- 작업을 확인 가능한 목표로 바꾼다. 검증 추가 → 잘못된 입력 테스트를 쓰고 통과시킨다. 버그 수정 → 재현 테스트를 쓰고 통과시킨다. 리팩터링 → 전후로 테스트가 통과하는지 확인한다.
+- 여러 단계 작업은 짧은 계획을 먼저 적는다. 형식: `1. [단계] → 확인: [검사]`
+- 완료는 검증 명령을 직접 돌리고 결과를 확인한 뒤에만 말한다. "되게 하기" 같은 약한 기준은 계속 확인을 받아야 하니, 강한 기준을 세운다.
 
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+## 경계
 
-## 프로젝트
+**먼저 확인받는다** (준비와 로컬 검증은 묻기 전에 끝내 둔다)
 
-Mechuri(메추리, "메뉴 추천 리스트")는 질문 몇 개에 답하면 오늘 먹을 메뉴를 골라 주는 "메뉴 아키네이터" 앱입니다. 마스코트는 탐정 메추리 "추리"입니다.
+- 새 외부 패키지 추가, 메이저 버전 올리기
+- 이미 머지된 마이그레이션 수정, 데이터를 지우는 마이그레이션
+- 배포 설정 변경: `render.yaml`, `backend/Dockerfile`, `frontend/eas.json`, `frontend/app.json`
+- 이미 있는 API의 응답 필드를 지우거나 이름·형식을 바꾸는 변경
+- 요청하지 않은 파일·문단 삭제나 덮어쓰기, 외부 서비스에 쓰기
 
-- `frontend/`: Expo SDK 54, React Native 0.81, React 19.1, TypeScript
-- `backend/`: Node 20+, Express, Sequelize, PostgreSQL, Socket.IO(같이 정하기 방)
-- 루트 `package.json`: `concurrently`로 둘을 함께 띄우는 스크립트만 있습니다.
+**하지 않는다**
 
-## 폴더
+- 비밀값(`.env`, 토큰, 카카오 키)을 출력하거나 커밋하지 않는다. 새 환경 변수는 이름만 `.env.example`에 추가한다.
+- 생성되는 파일을 손으로 고치지 않는다. `package-lock.json`은 `npm install`로 다시 만든다.
+- 테스트를 지우거나 건너뛰게 해서 통과시키지 않는다. 실패 원인을 고친다.
 
-```
-frontend/App.tsx              글꼴 로드(useFonts), SafeAreaProvider, NavigationContainer
-frontend/src/api/             서버 호출(apiFetch), 로그인 세션, 카카오 로그인, 방 소켓
-frontend/src/engine/          추천 로직. 화면과 분리된 순수 함수 (점수, 개인화, 그룹 점수, 식사 리포트)
-frontend/src/constants/       메뉴 데이터(menuData), 질문(akinatorQuestions)
-frontend/src/screens/         탭 화면 (홈·추천·같이·지도·내정보, 월드컵은 숨은 탭), group/ 하위 화면
-frontend/src/components/      공용 컴포넌트 (LoginSheet, TasteSheet, MiniWorldCup, QuailBadge)
-frontend/src/storage/         게스트/로그인 사용자 데이터 저장 (userData)
-frontend/src/analytics/       이벤트 수집 (track, flushEvents)
-frontend/src/theme/           디자인 토큰 (colors, typography, spacing)
-backend/src/routes/           auth, user, restaurants, events, rooms, weather API
-backend/src/models/           Sequelize 모델
-backend/src/realtime/         같이 정하기 방 (메모리 RoomSession + DB 저장)
-backend/migrations/           sequelize-cli 마이그레이션
-docs/                         메뉴 속성 기준표, 디자인 토큰, 배포, 개인정보처리방침
-```
+그 밖의 읽기, 로컬 수정, 테스트, 브랜치·PR 작업은 묻지 않고 진행한다.
 
-## 실행과 테스트
+## 구조
 
-```bash
-npm install && npm install --prefix backend && npm install --prefix frontend
-docker compose -f backend/docker-compose.yml up -d   # 로컬 PostgreSQL
-npm run dev                                          # 서버(nodemon) + Expo
-
-npm test --prefix frontend            # jest-expo
-npm run typecheck --prefix frontend   # tsc --noEmit
-npm run check:menu --prefix frontend  # 메뉴 데이터 점검
-npm test --prefix backend             # node --test
-# 마이그레이션까지 확인 (DB 이름에 test가 들어가야 하고, 그 DB의 public 스키마를 지웁니다)
-TEST_DATABASE_URL=postgres://postgres:mechuri_password@127.0.0.1:5432/mechuri_test npm test --prefix backend
-```
-
-PR을 올리기 전에 프론트 테스트, 타입 검사, 백엔드 테스트를 모두 통과시킵니다.
+- import는 `screens → components → engine · storage · api · constants · theme` 방향으로만 한다. `components`와 그 아래 폴더는 `screens`를 import하지 않고, `engine`은 `components`·`screens`를 import하지 않는다.
+- `src/engine/`은 순수 함수만 둔다. React, React Native, AsyncStorage, 네트워크를 쓰지 않는다 (타입 import는 괜찮다).
+- 서버 호출은 `fetch` 대신 `apiFetch('/api/...')`(`src/api/client.ts`)를 쓴다. 서버 주소와 로그인 토큰이 여기서만 붙는다.
+- 휴대폰에 깔린 앱은 바로 업데이트되지 않는다. API는 필드를 추가하는 방식으로 바꾸고, 앱이 새 API를 쓰면 서버를 먼저 배포한다.
 
 ## 프론트엔드 규칙
 
-- **테마 토큰**: 색·글꼴·간격은 항상 `src/theme`에서 가져옵니다 (`import { colors, fonts, typography, spacing, radii } from '../theme'`). 화면 파일 안에 따로 팔레트나 색 상수를 만들지 않습니다.
-- **테마색**: 앱 전체 테마색은 `src/theme/colors.ts`의 `BRAND` 한 줄로 정합니다 (기본 `tomato`, 후보는 `brandThemes`). 코드에서는 `colors.brand`, `brandDeep`, `brandSoft`, `brandText`, `onBrand`만 쓰고 hex를 직접 적지 않습니다. 새 후보를 넣을 때는 `brand`가 흰 글자(`onBrand`)와 4.5:1 이상 대비가 나야 합니다.
-- **글꼴**: 글꼴은 Noto Sans KR 하나이고 굵기마다 이름이 다릅니다. 굵기는 `fontWeight`가 아니라 `fontFamily`로 정합니다 (`fonts.display`/`heavy`/`bold`/`medium`/`body`, 또는 `typography.*`). 안드로이드는 커스텀 글꼴에서 `fontWeight`를 무시합니다. 이모지만 있는 텍스트에는 `fontFamily`를 넣지 않습니다.
-- **SafeAreaView**: `react-native`가 아니라 `react-native-safe-area-context`의 `SafeAreaView`를 쓰고, 탭 화면은 `edges={['top']}`을 줍니다. RN 기본 `SafeAreaView`는 iOS 전용이고 SDK 54 안드로이드는 edge-to-edge입니다.
-- **서버 호출**: `fetch` 대신 `apiFetch('/api/...')`(`src/api/client.ts`)를 씁니다. 서버 주소와 로그인 토큰이 자동으로 붙습니다.
-- **추천 로직**은 `src/engine/`의 순수 함수로 두고 테스트를 함께 씁니다. 화면에는 상태와 표시만 둡니다.
-- 백엔드 `realtime/questionOrder.js`의 질문 id는 `constants/akinatorQuestions.ts`와 같아야 합니다 (테스트가 확인합니다).
-- 화면 테스트는 `require('react-test-renderer')`를 씁니다. `react-test-renderer`는 `react`와 같은 정확한 버전(19.1.0)으로 고정합니다. 범위로 바꾸면 npm ERESOLVE가 납니다.
-- 다크 모드 값(`darkColors`)은 정의만 되어 있고 앱은 아직 라이트만 씁니다.
+- 색·글꼴·간격은 `src/theme`에서만 가져온다. 화면 파일에 hex 값이나 별도 팔레트를 만들지 말고 `colors.*` 토큰을 쓴다.
+- 테마색은 `src/theme/colors.ts`의 `BRAND` 한 줄로만 바꾼다. 코드에서는 `colors.brand`·`brandDeep`·`brandSoft`·`brandText`·`onBrand`를 쓴다. 새 후보색은 흰 글자와 4.5:1 이상 대비가 나야 한다.
+- 굵기는 `fontWeight` 대신 `fontFamily`(`fonts.*` 또는 `typography.*`)로 정한다. 이모지만 있는 텍스트에는 `fontFamily`를 넣지 않는다.
+- `SafeAreaView`는 `react-native` 대신 `react-native-safe-area-context`에서 가져오고, 탭 화면은 기본적으로 `edges={['top']}`을 준다.
+- Expo API는 SDK 54 문서(`https://docs.expo.dev/versions/v54.0.0/`)를 기준으로 쓴다.
 
 ## 백엔드 규칙
 
-- **마이그레이션**: 모델(`src/models/`)을 추가하거나 컬럼을 바꾸면 같은 PR에 `backend/migrations/` 마이그레이션을 꼭 넣습니다 (`npm run db:migration:new -- <이름>`). 운영(`NODE_ENV=production`)은 `sync`를 하지 않고 마이그레이션만 적용합니다. `TEST_DATABASE_URL`로 테스트를 돌리면 모델과 마이그레이션이 어긋날 때 실패합니다.
-- 회원 탈퇴(`src/user/deleteAccount.js`)는 계정에 묶인 기록을 직접 지웁니다 (같이 정하기 참가 기록은 지우지 않고 계정 연결만 끊습니다). 사용자와 연결된 새 테이블을 만들면 여기에도 추가합니다.
-- 개발용 단축 로그인(`/api/auth/kakao/mobile`)은 `NODE_ENV=production`에서 막혀 있어야 합니다.
-- 비밀값은 `.env`에만 두고 커밋하지 않습니다. 새 환경 변수는 `.env.example`에 추가합니다.
+- 모델(`src/models/`)을 추가하거나 컬럼을 바꾸면 같은 PR에 마이그레이션을 넣는다 (`npm run db:migration:new -- <이름>`). 운영은 `sync` 없이 마이그레이션만 적용한다.
+- 사용자와 연결된 테이블을 새로 만들면 회원 탈퇴(`src/user/deleteAccount.js`)에도 처리를 추가한다.
+- 개발용 단축 로그인(`/api/auth/kakao/mobile`)은 `NODE_ENV=production`에서 막힌 상태를 유지한다.
+
+## 테스트와 주석
+
+- 테스트는 변경 전에는 실패하고 변경 후에는 통과하는 것만 추가한다. 이미 통과하는 테스트, 고친 함수를 mock하고 그 mock을 확인하는 테스트는 넣지 않는다.
+- 추천 로직(`src/engine/`)을 바꾸면 `engine/__tests__`에 테스트를 함께 쓴다.
+- 주석은 코드만 보고 알 수 없는 이유(플랫폼 버그, 호출 순서, 바꾸면 안 되는 값)만 쓴다. 다음 줄을 되풀이하거나 버그의 경위를 적지 않는다. 경위는 PR 설명에 쓴다. 내 변경으로 틀리게 된 주석은 고친다.
+
+## 검증
+
+바꾼 경로의 명령을 돌린다. 문서만 바꿨으면 내용·링크 검토로 끝낸다.
+
+- `frontend/` → `npm test --prefix frontend && npm run typecheck --prefix frontend`
+- `frontend/src/constants/menuData.ts` → 위 명령 + `npm run check:menu --prefix frontend`
+- `backend/` → `npm test --prefix backend`
+- `backend/src/models/`, `backend/migrations/` → 빈 테스트 DB로 `TEST_DATABASE_URL=postgres://.../mechuri_test npm test --prefix backend`
+
+함정:
+
+- `TEST_DATABASE_URL`을 주면 그 DB의 public 스키마를 지운다. 이름이 `_test`로 끝나는 빈 로컬 DB만 쓴다 (원격은 `ALLOW_REMOTE_TEST_DB=true`가 필요하다). 이 값이 없으면 DB 테스트는 건너뛰므로 "통과"가 마이그레이션 검증을 뜻하지 않는다.
+- 질문 id는 `frontend/src/constants/akinatorQuestions.ts`와 `backend/src/realtime/questionOrder.js` 양쪽에 있다. 한쪽을 바꾸면 다른 쪽도 바꾼다 (백엔드 테스트가 확인한다).
+- `react-test-renderer`는 `react`와 같은 정확한 버전(19.1.0)으로 고정한다. 범위로 바꾸면 npm ERESOLVE가 난다.
+- 패키지 매니저는 npm만 쓴다 (yarn, pnpm 금지).
 
 ## 파일 형식
 
-- 저장소의 텍스트 파일은 **LF** 줄바꿈입니다. 윈도우에서 CRLF로 바뀐 파일은 LF로 맞춰서 커밋합니다.
-- 코드 주석과 문서는 한국어로 씁니다.
+- 텍스트 파일은 LF 줄바꿈이다. CRLF로 바뀐 파일은 LF로 맞춰 커밋한다.
+- 코드 주석과 문서는 한국어로 쓴다.
 
-## PR 규칙
+## PR과 리뷰
 
-- 작업은 브랜치에서 하고 PR로 올립니다. 머지는 merge commit으로 합니다 (rebase하지 않습니다. 봇이 PR 브랜치에 커밋을 올릴 수 있습니다).
-- **봇 리뷰(CodeRabbit, Copilot)**: 코멘트를 전부 반영하지 않습니다. 각 코멘트를 코드와 대조해 검증하고, 맞는 것만 고칩니다. 반영하지 않은 코멘트에는 PR 스레드에 이유를 짧게 답합니다.
-- **머지 조건**: 아래가 모두 맞을 때만 머지합니다.
-  1. 최신 `main`과 충돌이 없다.
-  2. 최신 `main`을 합친 상태에서 테스트와 타입 검사가 통과한다.
-  3. 봇 리뷰가 **최신 커밋에 대해 실제로 돌았고**, 그 코멘트를 처리했다. 리뷰를 받지 않은 PR은 머지하지 않습니다. CodeRabbit 한도(시간당 10회)가 차면 PR을 열어 두고 알립니다.
-  4. 스택 PR이면 아래 PR이 먼저 머지됐다.
-- 수정은 PR당 한 번에 모아서 푸시하고, 자동 리뷰가 멈추면 `@coderabbitai review`로 다시 요청합니다.
-- 충돌이 나면 `main`을 브랜치에 merge해서 풀고, lockfile은 `main` 쪽을 받은 뒤 `npm install`로 다시 만들고, 테스트를 다시 돌린 뒤 푸시합니다.
-- 머지한 뒤에는 열려 있는 다른 PR에 충돌이 생겼는지 확인합니다.
+- 작업은 브랜치에서 하고 PR로 올린다. PR 하나는 한 가지 일만 하고, 한 번에 읽을 수 있는 크기로 만든다. 이유가 둘이면 PR을 나눈다.
+- PR은 직접 머지하지 않는다. 머지는 사용자가 한다. PR이 준비되면 준비됐다고 알린다.
+- PR 브랜치는 rebase·force push하지 않는다 (봇이 PR 브랜치에 커밋을 올릴 수 있다).
+- 봇 리뷰(CodeRabbit, Copilot) 코멘트는 코드와 대조해 검증하고 맞는 것만 고친다. 반영하지 않은 코멘트에는 이유를 짧게 답한다.
+- 수정은 한 번에 모아 푸시하고, 자동 리뷰가 멈추면 `@coderabbitai review`로 다시 요청한다.
+- 충돌은 `main`을 브랜치에 merge해서 풀고, lockfile은 `main` 쪽을 받은 뒤 `npm install`로 다시 만든다. 머지한 뒤에는 열린 다른 PR에 충돌이 생겼는지 확인한다.
+
+## 이 문서 관리
+
+- 코드나 설정을 보면 알 수 있는 내용(폴더 목록, 스크립트 전체)과 일반론은 쓰지 않는다. 지키지 않으면 실제로 문제가 나는 규칙만 둔다.
+- 금지 규칙에는 대신 할 행동을 함께 쓴다.
+- 작업하다 새 함정을 찾으면 한 줄로 "함정"에 추가하고, 그 수정과 같은 PR에 넣는다. 틀린 규칙은 발견한 PR에서 고치거나 지운다.
