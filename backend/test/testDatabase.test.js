@@ -23,7 +23,16 @@ test('rejects a remote host unless ALLOW_REMOTE_TEST_DB=true', () => {
 
 test('rejects production and the server database', () => {
   assert.throws(() => assertSafeTestDatabaseUrl(LOCAL, { NODE_ENV: 'production' }), /NODE_ENV=production/);
-  assert.throws(() => assertSafeTestDatabaseUrl(LOCAL, { DATABASE_URL: LOCAL }), /same as DATABASE_URL/);
+  assert.throws(() => assertSafeTestDatabaseUrl(LOCAL, { DATABASE_URL: LOCAL }), /server database/);
+});
+
+test('rejects the server database written another way', () => {
+  // 포트 생략, localhost와 127.0.0.1
+  assert.throws(() => assertSafeTestDatabaseUrl('postgres://u:p@localhost/mechuri_test', { DATABASE_URL: LOCAL }), /server database/);
+  // DATABASE_URL 없이 DB_* 로 접속하는 서버
+  const dbEnv = { DB_HOST: '127.0.0.1', DB_PORT: '5432', DB_NAME: 'mechuri_test' };
+  assert.throws(() => assertSafeTestDatabaseUrl(LOCAL, dbEnv), /server database/);
+  assert.strictEqual(assertSafeTestDatabaseUrl(LOCAL, { ...dbEnv, DB_NAME: 'mechuri_db' }), 'mechuri_test');
 });
 
 test('rejects an invalid URL', () => {

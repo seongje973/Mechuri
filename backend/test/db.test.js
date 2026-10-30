@@ -9,6 +9,9 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { assertSafeTestDatabaseUrl } = require('./helpers/testDatabase');
 
+// 서버 설정(.env의 NODE_ENV, DATABASE_URL, DB_*)까지 읽은 뒤에 검사한다
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const skip = TEST_DATABASE_URL ? false : 'TEST_DATABASE_URL not set';
 
