@@ -1,11 +1,16 @@
 // 실제 PostgreSQL이 필요한 테스트. TEST_DATABASE_URL이 있을 때만 돈다.
-// ⚠️ 그 DB의 public 스키마를 지우고 다시 만든다. 개발 DB 말고 빈 테스트용 DB를 쓰세요 (이름에 test가 없으면 멈춘다).
+// ⚠️ 그 DB의 public 스키마를 지우고 다시 만든다. 개발 DB 말고 빈 테스트용 DB를 쓰세요.
+//   이름이 _test로 끝나는 로컬 DB만 받는다 (helpers/testDatabase.js).
 //   예: TEST_DATABASE_URL=postgres://postgres:mechuri_password@127.0.0.1:5432/mechuri_test npm test
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { assertSafeTestDatabaseUrl } = require('./helpers/testDatabase');
+
+// 서버 설정(.env의 NODE_ENV, DATABASE_URL, DB_*)까지 읽은 뒤에 검사한다
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const skip = TEST_DATABASE_URL ? false : 'TEST_DATABASE_URL not set';
@@ -19,6 +24,8 @@ const migrate = (...args) =>
   });
 
 test('database', { skip }, async (t) => {
+  // 서버용 DATABASE_URL을 덮어쓰기 전에 확인한다
+  assertSafeTestDatabaseUrl(TEST_DATABASE_URL);
   process.env.DATABASE_URL = TEST_DATABASE_URL;
   const { sequelize } = require('../src/config/db');
   // 새 모델을 추가하고 마이그레이션을 빠뜨리면 첫 테스트가 실패한다
@@ -33,7 +40,7 @@ test('database', { skip }, async (t) => {
     CODE_TTL_MS
   } = require('../src/auth/loginHandoff');
   const dbName = sequelize.getDatabaseName();
-  assert.match(dbName, /test/i, `Refusing to reset schema of non-test database "${dbName}"`);
+  assert.match(dbName, /_test$/, `Refusing to reset schema of non-test database "${dbName}"`);
   const resetSchema = () => sequelize.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
 
   try {

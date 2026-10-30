@@ -56,6 +56,7 @@ Expo 화면의 QR 코드를 폰의 Expo Go로 찍으면 됩니다.
 npm test --prefix frontend           # 추천 엔진, API 클라이언트 테스트 (jest-expo)
 npm test --prefix backend            # 카카오 로그인 코드 교환, 이벤트 API 테스트 (node --test)
 # 마이그레이션과 DB 로그인 코드 저장소까지 확인하려면 빈 테스트용 DB를 지정 (그 DB의 public 스키마를 지웁니다)
+# 이름이 _test로 끝나는 로컬 DB만 받습니다. 원격 테스트 DB는 ALLOW_REMOTE_TEST_DB=true를 함께 줍니다
 TEST_DATABASE_URL=postgres://postgres:mechuri_password@127.0.0.1:5432/mechuri_test npm test --prefix backend
 npm run typecheck --prefix frontend  # 타입 검사
 ```
