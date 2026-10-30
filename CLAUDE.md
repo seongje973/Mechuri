@@ -99,7 +99,7 @@ npm test --prefix frontend            # jest-expo
 npm run typecheck --prefix frontend   # tsc --noEmit
 npm run check:menu --prefix frontend  # 메뉴 데이터 점검
 npm test --prefix backend             # node --test
-# 마이그레이션까지 확인 (DB 이름에 test가 들어가야 하고, 그 DB의 public 스키마를 지웁니다)
+# 마이그레이션까지 확인 (이름이 _test로 끝나는 로컬 DB여야 하고, 그 DB의 public 스키마를 지웁니다)
 TEST_DATABASE_URL=postgres://postgres:mechuri_password@127.0.0.1:5432/mechuri_test npm test --prefix backend
 ```
 
