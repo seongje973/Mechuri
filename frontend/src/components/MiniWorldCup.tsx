@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { MenuItem } from '../constants/menuData';
-import { colors, fonts } from '../theme';
+import { styles } from './MiniWorldCup.style';
 
 interface MiniWorldCupProps {
   /** 2개 이상 짝수 권장. 홀수면 마지막 메뉴는 부전승 */
@@ -59,22 +59,3 @@ export default function MiniWorldCup({ menus, title = '둘 중 하나만 골라 
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 },
-  round: { fontSize: 13, fontFamily: fonts.bold, color: colors.brandText, marginBottom: 6 },
-  title: { fontSize: 20, fontFamily: fonts.display, color: colors.ink, marginBottom: 20, textAlign: 'center' },
-  row: { flexDirection: 'row', gap: 12 },
-  card: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 28,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.brandSoft,
-  },
-  emoji: { fontSize: 44, marginBottom: 10 },
-  name: { fontSize: 17, fontFamily: fonts.bold, color: colors.ink },
-  category: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, marginTop: 4 },
-});
