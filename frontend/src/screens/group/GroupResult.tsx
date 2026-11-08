@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { MENU_DATA, MenuItem } from '../../constants/menuData';
 import { GroupMember, GroupResult as GroupScore, groupReasons, scoreGroup } from '../../engine/groupScore';
 import { RoomState } from '../../api/roomSocket';
 import MiniWorldCup from '../../components/MiniWorldCup';
-import { colors, fonts } from '../../theme';
+import { styles } from './GroupResult.style';
 import { gs } from './groupTheme';
 
 interface Props {
@@ -181,17 +181,3 @@ export default function GroupResult({ state, me, onOpenVote, onVote, onFindResta
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  lead: { fontSize: 15, fontFamily: fonts.bold, color: colors.brandText, marginTop: 4, paddingHorizontal: 4 },
-  winnerCard: { padding: 0, overflow: 'hidden' },
-  winnerImage: { height: 170, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center' },
-  winnerEmoji: { fontFamily: fonts.body, fontSize: 72 },
-  winnerBody: { padding: 20 },
-  winnerBadge: { alignSelf: 'flex-start', backgroundColor: colors.brand, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
-  winnerBadgeText: { fontFamily: fonts.heavy, fontSize: 12, color: colors.onBrand },
-  winnerName: { fontSize: 30, lineHeight: 40, letterSpacing: -1, fontFamily: fonts.display, color: colors.ink, marginTop: 8 },
-  winnerDesc: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21, color: colors.muted, marginTop: 4 },
-  waitTitle: { fontSize: 17, fontFamily: fonts.bold, color: colors.ink },
-  other: { fontFamily: fonts.body, fontSize: 15, color: colors.ink, paddingVertical: 4 },
-});

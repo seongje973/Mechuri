@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts } from '../theme';
+import { Text, View } from 'react-native';
+import { colors } from '../theme';
+import { styles } from './QuailBadge.style';
 
 type Props = {
   /** 동그라미 지름. 안의 메추리도 같이 커진다 */
@@ -39,30 +40,3 @@ export default function QuailBadge({ size = 44, background = colors.brandSoft }:
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  circle: {
-    overflow: 'hidden',
-  },
-  plume: {
-    position: 'absolute',
-    fontFamily: fonts.display,
-    color: colors.quailDark,
-  },
-  body: {
-    position: 'absolute',
-    backgroundColor: colors.quail,
-  },
-  eye: {
-    position: 'absolute',
-    backgroundColor: colors.ink,
-  },
-  beak: {
-    position: 'absolute',
-    width: 0,
-    height: 0,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    borderLeftColor: colors.beak,
-  },
-});
