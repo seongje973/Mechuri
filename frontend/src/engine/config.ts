@@ -56,6 +56,9 @@ export const RETRY_WORLDCUP_SIZE = 4;
 /** 즐겨찾기한 메뉴 보너스 (US-21) */
 export const FAVORITE_BONUS = 1;
 
+/** 요즘 많이 고른 메뉴(서버 인기 순위) 보너스. 다른 보정보다 작아서 동점을 가르는 정도로만 쓰인다 */
+export const POPULAR_BONUS = 0.25;
+
 /** 날씨·시간대 상황 보정 (L-02). 메뉴 하나에 상황 보정은 이 값까지만 */
 export const CONTEXT_BONUS = 1;
 /** 결과를 낼 때 아직 안 온 날씨를 기다리는 최대 시간 */

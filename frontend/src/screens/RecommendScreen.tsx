@@ -46,7 +46,7 @@ import {
   toRecommendSession
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
-import { personalAdjustments, rejectionAdjustments, similarMealAdjustments } from '../engine/personalize';
+import { personalAdjustments, popularAdjustments, rejectionAdjustments, similarMealAdjustments } from '../engine/personalize';
 import { RecommendContext, contextAdjustments, mergeAdjustments, mergeReasons } from '../engine/context';
 import { EMPTY_PREFERENCES, preferenceAdjustments } from '../engine/preferences';
 
@@ -357,11 +357,18 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     clearTimeout(timer);
   };
 
-  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 거절한 메뉴 감점, 취향 설정과 기록에서 배운 취향.
+  // 홈 화면과 같은 인기 순위. 못 받으면 빈 목록으로 둔다
+  const loadPopular = async (): Promise<{ menuName: string }[]> => {
+    const res = await apiFetch('/api/restaurants/ranking', { auth: false, timeoutMs: 3000 });
+    const data = res.ok ? await res.json() : {};
+    return Array.isArray(data.ranking) ? data.ranking : [];
+  };
+
+  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 거절한 메뉴 감점, 인기 메뉴 +0.25, 취향 설정과 기록에서 배운 취향.
   // 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]>; eaten: string[] }> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
-    const [histories, favorites, preferences, rejections] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences(), getRejections()]);
+    const [histories, favorites, preferences, rejections, popular] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences(), getRejections(), loadPopular()]);
     if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
     if (favorites.status === 'rejected') console.log("Failed to load favorites for adjustments", favorites.reason);
     if (preferences.status === 'rejected') console.log("Failed to load preferences for adjustments", preferences.reason);
@@ -380,6 +387,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         personal,
         similarMealAdjustments(meals, MENU_DATA),
         rejectionAdjustments(rejections.status === 'fulfilled' ? rejections.value : [], MENU_DATA),
+        popularAdjustments(popular.status === 'fulfilled' ? popular.value : []),
         taste.adjustments
       ),
       reasons: taste.reasons,

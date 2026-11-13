@@ -2,7 +2,7 @@ import { MENU_DATA } from '../../constants/menuData';
 import { QUESTIONS } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
 import { answerQuestion, getResults, toRecommendSession } from '../recommendFlow';
-import { personalAdjustments, recentMealAdjustments, rejectionAdjustments, similarMealAdjustments } from '../personalize';
+import { personalAdjustments, popularAdjustments, recentMealAdjustments, rejectionAdjustments, similarMealAdjustments } from '../personalize';
 
 describe('recentMealAdjustments', () => {
   it('3일 이내에 먹은 메뉴만 한 번씩 -2', () => {
@@ -98,5 +98,14 @@ describe('personalAdjustments (US-21)', () => {
     const target = plain.find((r, i) => i > 0 && r.score === plain[0].score) ?? plain[1];
     const adjusted = getResults(session, QUESTIONS, personalAdjustments({ histories: [], favorites: [{ menuName: target.item.name }] }, now), 10);
     expect(adjusted.findIndex(r => r.item.name === target.item.name)).toBeLessThan(plain.findIndex(r => r.item.name === target.item.name));
+  });
+});
+
+describe('popularAdjustments', () => {
+  it('점수가 같으면 인기 순위에 든 메뉴가 데이터 순서보다 앞선다', () => {
+    const session = toRecommendSession(createScoreSession(MENU_DATA));
+    const plain = getResults(session, QUESTIONS, {}, 10).map(r => r.item.name);
+    const boosted = getResults(session, QUESTIONS, popularAdjustments([{ menuName: plain[5] }]), 10).map(r => r.item.name);
+    expect(boosted[0]).toBe(plain[5]);
   });
 });

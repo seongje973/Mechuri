@@ -1,6 +1,7 @@
 import { MenuItem } from '../constants/menuData';
 import {
   FAVORITE_BONUS,
+  POPULAR_BONUS,
   RECENT_MEAL_DAYS,
   RECENT_MEAL_PENALTY,
   REJECT_LEARN_DAYS,
@@ -75,6 +76,10 @@ export const rejectionAdjustments = (rejections: MealRecord[], menus: MenuItem[]
   });
   return adjustments;
 };
+
+/** 인기 순위에 든 메뉴에 작은 보너스. 점수가 같을 때 데이터 순서 대신 많이 고른 메뉴가 앞선다 */
+export const popularAdjustments = (ranking: { menuName: string }[]): Record<string, number> =>
+  Object.fromEntries(ranking.map(r => [r.menuName, POPULAR_BONUS]));
 
 export interface PersonalData {
   histories: MealRecord[];

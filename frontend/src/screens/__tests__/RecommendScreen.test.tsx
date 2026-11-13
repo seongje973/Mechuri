@@ -739,7 +739,7 @@ describe('RecommendScreen', () => {
 
   describe('주변 식당 목록 상태', () => {
     const { apiFetch } = jest.requireMock('../../api/client');
-    const restaurantCalls = () => apiFetch.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/restaurants'));
+    const restaurantCalls = () => apiFetch.mock.calls.filter((c: any[]) => String(c[0]).startsWith('/api/restaurants?'));
     afterEach(() => {
       apiFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ restaurants: [], histories: [] }) }));
     });
