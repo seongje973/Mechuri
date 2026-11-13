@@ -12,6 +12,12 @@ export const ANSWER_SCORES: Record<ScoreAnswer, { match: number; miss: number }>
   no: { match: -2, miss: 1 },
 };
 
+/**
+ * 딱 맞지는 않지만 가까운 메뉴(맵기가 한 단계 모자람, 가볍게·든든하게 질문에서 무게가 보통)가 받는 점수의 위치.
+ * 0이면 miss, 1이면 match와 같다. 0.25면 "응"에 -1, "아니"에 +0.25.
+ */
+export const NEAR_MATCH_LEVEL = 0.25;
+
 /** 질문은 최대 7개 (기획서 제품 원칙) */
 export const MAX_QUESTIONS = 7;
 /** 1위가 2위보다 이만큼 앞서면 바로 결과를 보여준다 */

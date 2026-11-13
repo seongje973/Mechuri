@@ -64,7 +64,7 @@ const situationKeep = (q: Question, answer: ScoreAnswer): ((item: MenuItem) => b
 /** 답 하나를 반영한다. 상황 질문은 후보를 거르고(전부 사라지면 거르지 않음), 취향 질문은 점수를 쌓는다. */
 export const answerQuestion = (session: RecommendSession, q: Question, answer: ScoreAnswer): RecommendSession => {
   if (q.kind === 'taste') {
-    return { ...session, ...applyScoreAnswer(session, q, answer) };
+    return { ...session, ...applyScoreAnswer(session, q, answer, true) };
   }
 
   const keep = situationKeep(q, answer);

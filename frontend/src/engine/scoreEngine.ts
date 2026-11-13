@@ -1,6 +1,6 @@
 import { MenuItem, getAvoidTags } from '../constants/menuData';
 import { Question, matchesQuestion } from '../constants/akinatorQuestions';
-import { ANSWER_SCORES, ScoreAnswer } from './config';
+import { ANSWER_SCORES, NEAR_MATCH_LEVEL, ScoreAnswer } from './config';
 
 /**
  * 점수 방식 추천 엔진 (S1, US-10).
@@ -59,15 +59,32 @@ export const createScoreSession = (menus: MenuItem[], options: SessionOptions = 
   return { candidates, scores, contributions, answers: [] };
 };
 
-/** 답 하나를 점수에 반영한다. 후보 수는 바뀌지 않는다. */
-export const applyScoreAnswer = (session: ScoreSession, question: Question, answer: ScoreAnswer): ScoreSession => {
+/** 질문의 속성을 갖지는 않았지만 한 단계 차이인 메뉴 */
+const isNearMatch = (item: MenuItem, q: Question): boolean =>
+  (q.attribute === 'spicyAtLeast' && item.spicy === q.value - 1) || (q.attribute === 'weight' && item.weight === 'normal');
+
+/**
+ * 답 하나를 점수에 반영한다. 후보 수는 바뀌지 않는다.
+ * tuned: 한 단계 차이 점수 같은 세부 조정을 쓴다. 혼자 하는 추천에서만 켠다.
+ * 같이 정하기는 폰마다 앱 버전이 달라도 같은 결과가 나와야 해서 기본 점수표만 쓴다.
+ */
+export const applyScoreAnswer = (
+  session: ScoreSession,
+  question: Question,
+  answer: ScoreAnswer,
+  tuned: boolean = false
+): ScoreSession => {
   const table = ANSWER_SCORES[answer];
   const scores = { ...session.scores };
   const contributions = { ...session.contributions };
 
   session.candidates.forEach(item => {
     const matched = matchesQuestion(item, question);
-    const delta = matched ? table.match : table.miss;
+    const delta = matched
+      ? table.match
+      : tuned && isNearMatch(item, question)
+        ? table.miss + (table.match - table.miss) * NEAR_MATCH_LEVEL
+        : table.miss;
     scores[item.name] += delta;
     if (delta !== 0) {
       contributions[item.name] = [...contributions[item.name], { questionId: question.id, answer, matched, delta }];

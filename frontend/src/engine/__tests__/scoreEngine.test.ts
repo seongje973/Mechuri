@@ -20,6 +20,16 @@ describe('점수 방식 엔진', () => {
     expect(ANSWER_SCORES.yes).toEqual({ match: 2, miss: -2 });
   });
 
+  it('tuned면 한 단계 차이인 메뉴는 miss와 match 사이 점수를 받는다 (맵기 1, 무게 보통)', () => {
+    const pool = [byName('김치찌개'), byName('비빔밥'), byName('된장찌개')]; // 맵기 2, 1, 0
+    const start = createScoreSession(pool);
+    expect(applyScoreAnswer(start, q('spicy'), 'yes', true).scores).toEqual({ 김치찌개: 2, 비빔밥: -1, 된장찌개: -2 });
+    expect(applyScoreAnswer(start, q('spicy'), 'no', true).scores).toEqual({ 김치찌개: -2, 비빔밥: 0.25, 된장찌개: 1 });
+    // 김치찌개는 무게가 보통
+    expect(applyScoreAnswer(start, q('weight-heavy'), 'yes', true).scores['김치찌개']).toBe(-1);
+    expect(applyScoreAnswer(start, q('spicy'), 'yes').scores['비빔밥']).toBe(-2);
+  });
+
   it('모순된 답 3개를 넣어도 후보가 0개가 되지 않는다', () => {
     let session = createScoreSession(MENU_DATA);
     session = applyScoreAnswer(session, q('soup'), 'yes');
