@@ -87,3 +87,34 @@ WHERE type = 'reject'
 GROUP BY 1
 ORDER BY rejects DESC, menu
 LIMIT 20;
+
+-- 튜닝용: 메뉴별 수락률. 1위로 보여 준 횟수 대비 그 메뉴를 수락(식당 보기·배달·먹을래요·하트)한 추천 수
+-- 많이 보여 주는데 수락률이 낮은 메뉴는 속성 값이나 점수 배율(frontend/src/engine/config.ts)을 살펴본다
+SELECT
+  s.menu,
+  COUNT(*) AS shown,
+  COUNT(*) FILTER (WHERE a."sessionId" IS NOT NULL) AS accepted,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE a."sessionId" IS NOT NULL) / COUNT(*), 1) AS accept_rate_pct
+FROM (
+  SELECT DISTINCT "sessionId", payload->>'menu' AS menu FROM metric_events WHERE type = 'result_shown'
+) s
+LEFT JOIN (
+  SELECT DISTINCT "sessionId", payload->>'menu' AS menu FROM metric_events WHERE type = 'accept'
+) a ON a."sessionId" = s."sessionId" AND a.menu = s.menu
+GROUP BY s.menu
+HAVING COUNT(*) >= 5
+ORDER BY accept_rate_pct, shown DESC
+LIMIT 20;
+
+-- 튜닝용: 질문별 답 분포. "상관없어"가 대부분이거나 한쪽 답으로 쏠린 질문은 후보를 못 좁히므로 문구나 순서를 살펴본다
+SELECT
+  payload->>'questionId' AS question,
+  COUNT(*) AS asked,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE payload->>'answer' = 'yes') / COUNT(*), 1) AS yes_pct,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE payload->>'answer' = 'probably') / COUNT(*), 1) AS probably_pct,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE payload->>'answer' = 'dontcare') / COUNT(*), 1) AS dontcare_pct,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE payload->>'answer' = 'no') / COUNT(*), 1) AS no_pct
+FROM metric_events
+WHERE type = 'question_answer'
+GROUP BY 1
+ORDER BY asked DESC, question;
