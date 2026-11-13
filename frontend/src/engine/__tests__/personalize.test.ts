@@ -2,7 +2,7 @@ import { MENU_DATA } from '../../constants/menuData';
 import { QUESTIONS } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
 import { answerQuestion, getResults, toRecommendSession } from '../recommendFlow';
-import { personalAdjustments, recentMealAdjustments } from '../personalize';
+import { personalAdjustments, recentMealAdjustments, similarMealAdjustments } from '../personalize';
 
 describe('recentMealAdjustments', () => {
   it('3일 이내에 먹은 메뉴만 한 번씩 -2', () => {
@@ -19,6 +19,21 @@ describe('recentMealAdjustments', () => {
         now
       )
     ).toEqual({ 짬뽕: -2 });
+  });
+});
+
+describe('similarMealAdjustments', () => {
+  const now = new Date('2026-11-10T12:00:00Z').getTime();
+
+  it('2일 안에 먹은 메뉴와 비슷한 메뉴만 -1, 먹은 메뉴 자체는 뺀다', () => {
+    const adj = similarMealAdjustments([{ menuName: '김치찌개', createdAt: '2026-11-09T12:00:00Z' }], MENU_DATA, now);
+    expect(adj['된장찌개']).toBe(-1);
+    expect(adj['김치찌개']).toBeUndefined();
+    expect(adj['초밥']).toBeUndefined();
+  });
+
+  it('2일이 지났으면 감점하지 않는다', () => {
+    expect(similarMealAdjustments([{ menuName: '김치찌개', createdAt: '2026-11-07T12:00:00Z' }], MENU_DATA, now)).toEqual({});
   });
 });
 

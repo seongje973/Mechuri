@@ -43,7 +43,7 @@ import {
   toRecommendSession
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
-import { personalAdjustments } from '../engine/personalize';
+import { personalAdjustments, similarMealAdjustments } from '../engine/personalize';
 import { RecommendContext, contextAdjustments, mergeAdjustments, mergeReasons } from '../engine/context';
 import { EMPTY_PREFERENCES, preferenceAdjustments } from '../engine/preferences';
 
@@ -347,7 +347,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     clearTimeout(timer);
   };
 
-  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21), 취향 설정과 기록에서 배운 취향.
+  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 취향 설정과 기록에서 배운 취향.
   // 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]> }> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
@@ -365,7 +365,10 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       histories: meals,
       favorites: favorites.status === 'fulfilled' ? favorites.value : [],
     });
-    return { adjustments: mergeAdjustments(personal, taste.adjustments), reasons: taste.reasons };
+    return {
+      adjustments: mergeAdjustments(personal, similarMealAdjustments(meals, MENU_DATA), taste.adjustments),
+      reasons: taste.reasons,
+    };
   };
 
   const showResults = (ranked: RecommendResult[], finalSession: RecommendSession | null, via?: 'worldcup') => {

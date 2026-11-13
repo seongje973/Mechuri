@@ -1,4 +1,6 @@
-import { FAVORITE_BONUS, RECENT_MEAL_DAYS, RECENT_MEAL_PENALTY } from './config';
+import { MenuItem } from '../constants/menuData';
+import { FAVORITE_BONUS, RECENT_MEAL_DAYS, RECENT_MEAL_PENALTY, SIMILAR_MEAL_DAYS, SIMILAR_MEAL_PENALTY } from './config';
+import { isSimilarMenu } from './similarity';
 
 export interface MealRecord {
   menuName: string;
@@ -15,6 +17,28 @@ export const recentMealAdjustments = (meals: MealRecord[], now: number = Date.no
     const elapsed = now - eatenAt;
     if (Number.isNaN(eatenAt) || elapsed < 0 || elapsed > RECENT_MEAL_DAYS * DAY_MS) return;
     adjustments[meal.menuName] = RECENT_MEAL_PENALTY; // 여러 번 먹어도 한 번만 감점
+  });
+  return adjustments;
+};
+
+/**
+ * 최근 2일 안에 먹은 메뉴와 비슷한 메뉴도 약하게 감점한다 (어제 김치찌개를 먹었으면 다른 찌개도 덜 나오게).
+ * 먹은 메뉴 자체는 recentMealAdjustments가 감점하므로 여기서는 뺀다.
+ */
+export const similarMealAdjustments = (meals: MealRecord[], menus: MenuItem[], now: number = Date.now()): Record<string, number> => {
+  const byName = new Map(menus.map(m => [m.name, m]));
+  const recent = meals
+    .filter(meal => {
+      const elapsed = now - new Date(meal.createdAt).getTime();
+      return elapsed >= 0 && elapsed <= SIMILAR_MEAL_DAYS * DAY_MS;
+    })
+    .map(meal => byName.get(meal.menuName))
+    .filter((item): item is MenuItem => !!item);
+  const adjustments: Record<string, number> = {};
+  menus.forEach(item => {
+    if (!recent.includes(item) && recent.some(eaten => isSimilarMenu(eaten, item))) {
+      adjustments[item.name] = SIMILAR_MEAL_PENALTY;
+    }
   });
   return adjustments;
 };
