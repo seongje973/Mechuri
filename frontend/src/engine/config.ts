@@ -93,6 +93,8 @@ export const SPICY_MILD_PENALTY_PER_LEVEL = -0.5;
 
 /** 기록에서 배우는 속성별 취향(주재료·국물·맵기·무게·온도). 이만큼은 먹은 기록이 있어야 배운다 */
 export const PROFILE_MIN_MEALS = 5;
+/** 이 시각부터는 저녁으로 본다. 지금과 같은 때(평일·주말 × 낮·저녁)의 기록이 충분하면 그 기록만으로 배운다 */
+export const PROFILE_EVENING_START_HOUR = 15;
 /** (내 기록에서의 비율 - 전체 메뉴에서의 비율) 1.0당 점수 */
 export const PROFILE_WEIGHT = 2;
 /** 속성별 취향 보정은 메뉴 하나에 이 값까지만 (위·아래 모두) */

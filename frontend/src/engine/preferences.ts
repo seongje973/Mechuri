@@ -5,6 +5,7 @@ import {
   LEARN_MIN_MEALS,
   LEARN_MIN_SHARE,
   LIKED_CUISINE_BONUS,
+  PROFILE_EVENING_START_HOUR,
   PROFILE_MAX_BONUS,
   PROFILE_MIN_MEALS,
   PROFILE_REASON_LIFT,
@@ -88,8 +89,16 @@ const shares = (items: MenuItem[], trait: Trait): Map<string, number> => {
   return counts;
 };
 
+/** 평일·주말 × 낮·저녁 (기기 시각 기준) */
+const mealSlot = (time: number): string => {
+  const d = new Date(time);
+  const weekend = d.getDay() === 0 || d.getDay() === 6;
+  return `${weekend ? 'weekend' : 'weekday'}-${d.getHours() < PROFILE_EVENING_START_HOUR ? 'day' : 'evening'}`;
+};
+
 /**
  * 최근 30일 기록에서 배운 속성별 취향 보정. 전체 메뉴에서의 비율보다 자주 먹은 속성은 올리고 덜 먹은 속성은 내린다.
+ * 지금과 같은 때(평일 낮, 주말 저녁 등)에 먹은 기록이 5개 이상이면 그 기록만 쓰고, 아니면 전체 기록을 쓴다.
  * 기록 5개 이상일 때만. learnSpicy가 false면 맵기는 배우지 않는다 (직접 고른 매운맛 취향이 있을 때).
  */
 export const profileAdjustments = (
@@ -99,13 +108,11 @@ export const profileAdjustments = (
   learnSpicy: boolean = true
 ): PreferenceBoost => {
   const byName = new Map(menus.map(m => [m.name, m]));
-  const eaten = meals
-    .filter(meal => {
-      const elapsed = now - new Date(meal.createdAt).getTime();
-      return elapsed >= 0 && elapsed <= LEARN_DAYS * DAY_MS;
-    })
-    .map(meal => byName.get(meal.menuName))
-    .filter((item): item is MenuItem => !!item);
+  const recent = meals
+    .map(meal => ({ item: byName.get(meal.menuName), at: new Date(meal.createdAt).getTime() }))
+    .filter((m): m is { item: MenuItem; at: number } => !!m.item && now - m.at >= 0 && now - m.at <= LEARN_DAYS * DAY_MS);
+  const sameSlot = recent.filter(m => mealSlot(m.at) === mealSlot(now));
+  const eaten = (sameSlot.length >= PROFILE_MIN_MEALS ? sameSlot : recent).map(m => m.item);
   const adjustments: Record<string, number> = {};
   const reasons: Record<string, string[]> = {};
   if (eaten.length < PROFILE_MIN_MEALS) return { adjustments, reasons };

@@ -120,6 +120,18 @@ describe('profileAdjustments (기록에서 배운 속성별 취향)', () => {
     expect(gap(profileAdjustments(MENU_DATA, spicy, now, false).adjustments)).toBe(0);
   });
 
+  it('지금과 같은 때의 기록이 5개 이상이면 그 기록만으로 배운다', () => {
+    // 기기 시각 기준이라 로컬 시각으로 만든다. 2026-11-11은 수요일
+    const at = (day: number, hour: number) => new Date(2026, 10, day, hour).toISOString();
+    const lunches = soups.slice(0, 5).map((menuName, i) => ({ menuName, createdAt: at(2 + i, 12) })); // 평일 점심: 국물
+    const dinners = ['삼겹살', '닭갈비', '족발', '보쌈', '소불고기'].map((menuName, i) => ({ menuName, createdAt: at(2 + i, 19) })); // 평일 저녁: 고기
+    const all = [...lunches, ...dinners];
+    const lunch = profileAdjustments(MENU_DATA, all, new Date(2026, 10, 11, 12).getTime()).adjustments;
+    const dinner = profileAdjustments(MENU_DATA, all, new Date(2026, 10, 11, 19).getTime()).adjustments;
+    expect(lunch['된장찌개']).toBeGreaterThan(dinner['된장찌개']);
+    expect(dinner['삼겹살']).toBeGreaterThan(lunch['삼겹살']);
+  });
+
   it('preferenceAdjustments에 함께 더해진다', () => {
     const { adjustments, reasons } = preferenceAdjustments(MENU_DATA, EMPTY_PREFERENCES, meals, now);
     expect(adjustments['삼겹살']).toBeLessThan(0);
