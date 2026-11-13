@@ -1,10 +1,11 @@
 import { MENU_DATA, MenuItem } from '../../constants/menuData';
-import { QUESTIONS, Question } from '../../constants/akinatorQuestions';
+import { QUESTIONS, Question, matchesQuestion } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
 import { MAX_QUESTIONS, MAX_REASON_CHIPS, RETRY_EXTRA_QUESTIONS, RETRY_MIN_QUESTIONS, RETRY_WORLDCUP_SIZE, ScoreAnswer } from '../config';
 import {
   RecommendSession,
   answerQuestion,
+  applyRejectReason,
   canReject,
   rejectTopResult,
   worldCupCandidates,
@@ -74,6 +75,54 @@ describe('다음 질문 고르기 (US-11)', () => {
   });
 });
 
+describe('기대 효과로 질문 고르기', () => {
+  it('상위 10개가 똑같아도 전체 후보를 나누는 질문이 있으면 묻는다', () => {
+    const clones = Array.from({ length: 10 }, (_, i) => ({ ...byName('규동'), name: `규동 ${i}` }));
+    let s = start([...clones, byName('짬뽕')]);
+    let next = pickNextQuestion(s, QUESTIONS);
+    while (next && next.kind === 'situation') {
+      s = answerQuestion(s, next, 'dontcare');
+      next = pickNextQuestion(s, QUESTIONS);
+    }
+    expect(next).not.toBeNull();
+    expect(matchesQuestion(byName('짬뽕'), next!)).not.toBe(matchesQuestion(byName('규동'), next!));
+  });
+});
+
+describe('개인화 보정을 질문 선택과 멈춤에 반영', () => {
+  it('보정으로 앞선 메뉴들을 나누는 질문을 고른다', () => {
+    const rice = MENU_DATA.filter(m => m.base === 'rice');
+    const boost = Object.fromEntries(rice.map(m => [m.name, 5]));
+    const next = (adj?: Record<string, number>) => {
+      let cur = start();
+      // 상황 질문 2개는 건너뛴다
+      for (let i = 0; i < 2; i++) cur = answerQuestion(cur, pickNextQuestion(cur, QUESTIONS, adj)!, 'dontcare');
+      return pickNextQuestion(cur, QUESTIONS, adj)!;
+    };
+    expect(next().id).toBe('base-rice');
+    // 상위 후보가 모두 밥 메뉴면 밥 질문은 묻지 않고, 밥 메뉴 안에서 갈리는 질문을 고른다
+    const picked = next(boost);
+    expect(picked.id).not.toBe('base-rice');
+    const yes = rice.filter(m => matchesQuestion(m, picked)).length;
+    expect(yes).toBeGreaterThan(0);
+    expect(yes).toBeLessThan(rice.length);
+  });
+
+  it('보정까지 더해 3점 이상 앞서면 멈춘다. 취향 질문에 답하기 전에는 보정만으로 멈추지 않는다', () => {
+    let s = start([byName('짬뽕'), byName('짜장면'), byName('돈까스')]);
+    expect(shouldStop(s, QUESTIONS, { 짬뽕: 5 })).toBe(false);
+    s = answerQuestion(s, q('spicy'), 'probably'); // 짬뽕 +1, 나머지 0
+    expect(shouldStop(s, QUESTIONS)).toBe(false);
+    expect(shouldStop(s, QUESTIONS, { 짬뽕: 2 })).toBe(true);
+  });
+
+  it('취향 질문에 "상관없어"만 답했으면 보정만으로 멈추지 않는다', () => {
+    let s = start([byName('짬뽕'), byName('짜장면'), byName('돈까스')]);
+    s = answerQuestion(s, q('spicy'), 'dontcare');
+    expect(shouldStop(s, QUESTIONS, { 짬뽕: 5 })).toBe(false);
+  });
+});
+
 describe('멈추는 조건 (US-12)', () => {
   it('1위가 2위보다 3점 이상 앞서면 멈춘다', () => {
     let s = start([byName('짬뽕'), byName('짜장면'), byName('돈까스')]);
@@ -112,7 +161,8 @@ describe('결과와 추천 이유 (US-12)', () => {
     expect(top.item.soup).toBe(true);
     expect(top.item.spicy).toBeLessThan(2);
     expect(top.item.base).toBe('rice');
-    expect(top.reasons).toEqual(['국물 O', '밥', '안 매운 맛']);
+    // 주재료 질문은 배율이 커서 이유도 먼저 나온다
+    expect(top.reasons).toEqual(['밥', '국물 O', '안 매운 맛']);
     // 칩마다 그 메뉴의 양(+) 점수 근거가 있다
     results.forEach(r => {
       expect(r.contributions.filter(c => c.delta > 0).length).toBeGreaterThanOrEqual(Math.min(r.reasons.length, 1));
@@ -138,6 +188,32 @@ describe('결과와 추천 이유 (US-12)', () => {
     const withContext = getResults(s, QUESTIONS, {}, undefined, { [top.item.name]: '비 오는 날엔 국물' })[0];
     expect(withContext.reasons).toHaveLength(MAX_REASON_CHIPS);
     expect(withContext.reasons[MAX_REASON_CHIPS - 1]).toBe('비 오는 날엔 국물');
+  });
+
+  it('대안은 이미 고른 메뉴와 비슷한 메뉴를 건너뛴다. 모자라면 건너뛴 메뉴로 채운다', () => {
+    // 김치찌개와 된장찌개는 맵기만 다르다
+    const menus = [byName('김치찌개'), byName('된장찌개'), byName('초밥'), byName('피자')];
+    expect(getResults(start(menus), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
+    expect(getResults(start(menus.slice(0, 3)), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '된장찌개']);
+  });
+
+  it('월드컵처럼 4개를 달라고 하면 비슷한 메뉴도 순위 그대로 준다', () => {
+    const menus = [byName('김치찌개'), byName('된장찌개'), byName('초밥'), byName('피자'), byName('짜장면')];
+    const names = menus.map(m => m.name);
+    expect(getResults(start(menus), QUESTIONS, {}, RETRY_WORLDCUP_SIZE, {}, names).map(r => r.item.name)).toEqual(names.slice(0, 4));
+  });
+
+  it('결과가 모두 먹어 본 메뉴면 마지막 대안을 안 먹어 본 메뉴로 바꾼다', () => {
+    const menus = [byName('김치찌개'), byName('초밥'), byName('피자'), byName('짜장면')];
+    const plain = getResults(start(menus), QUESTIONS);
+    expect(plain.map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
+
+    const results = getResults(start(menus), QUESTIONS, {}, undefined, {}, ['김치찌개', '초밥', '피자']);
+    expect(results.map(r => r.item.name)).toEqual(['김치찌개', '초밥', '짜장면']);
+    expect(results[2].reasons).toContain('안 먹어 본 메뉴');
+    // 점수가 많이 낮은 메뉴로는 바꾸지 않는다
+    const low = getResults(start(menus), QUESTIONS, { 짜장면: -3 }, undefined, {}, ['김치찌개', '초밥', '피자']);
+    expect(low.map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
   });
 
   it('아무 답도 점수를 올리지 않았으면 나라별 분류를 이유로 보여준다', () => {
@@ -182,6 +258,16 @@ describe('"틀렸어요"로 다시 좁히기 (US-15)', () => {
     const retried = rejectTopResult(s, top);
     expect(retried.minAnswers).toBe(s.answers.length + RETRY_MIN_QUESTIONS);
     expect(shouldStop(retried, QUESTIONS)).toBe(false);
+  });
+
+  it('거절한 이유를 고르면 그 점이 같은 남은 후보를 감점한다', () => {
+    const s = rejectTopResult(start([byName('삼겹살'), byName('족발'), byName('김치찌개'), byName('된장찌개'), byName('초밥')]), '삼겹살');
+    const pork = byName('삼겹살'); // 든든, 1~2만원
+    expect(applyRejectReason(s, pork, 'heavy').scores).toMatchObject({ 족발: -2, 김치찌개: 0, 초밥: 0 });
+    expect(applyRejectReason(s, pork, 'pricey').scores).toMatchObject({ 족발: -2, 김치찌개: 0 });
+    expect(applyRejectReason(s, byName('김치찌개'), 'similar').scores).toMatchObject({ 된장찌개: -2, 초밥: 0 });
+    // 이미 가장 싼 메뉴를 거절했으면 그대로
+    expect(applyRejectReason(s, byName('김치찌개'), 'pricey').scores).toEqual(s.scores);
   });
 
   it('후보가 1개뿐이면 뺄 수 없다', () => {

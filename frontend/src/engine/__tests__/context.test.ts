@@ -31,6 +31,26 @@ describe('contextAdjustments (L-02)', () => {
     expect(contextAdjustments(MENU_DATA, { hour: 4 }).adjustments).toEqual({});
   });
 
+  it('아침엔 가벼운 음식, 평일 점심엔 혼자 먹기 좋은 만 원 이하, 금·토 저녁엔 여럿이 먹는 메뉴', () => {
+    const boosted = (ctx: { hour: number; day?: number }) => {
+      const { adjustments } = contextAdjustments(MENU_DATA, ctx);
+      return MENU_DATA.filter(m => adjustments[m.name]);
+    };
+    const morning = boosted({ hour: 8, day: 3 });
+    expect(morning.length).toBeGreaterThan(0);
+    expect(morning.every(m => m.weight === 'light')).toBe(true);
+
+    const lunch = contextAdjustments(MENU_DATA, { hour: 12, day: 3 });
+    expect(lunch.reasons['김치찌개']).toBe('평일 점심엔 간단하게');
+    expect(boosted({ hour: 12, day: 3 }).every(m => m.party === 'solo' && m.price === 'low')).toBe(true);
+    expect(boosted({ hour: 12, day: 0 })).toEqual([]); // 일요일 점심
+
+    const friday = boosted({ hour: 19, day: 5 });
+    expect(friday.length).toBeGreaterThan(0);
+    expect(friday.every(m => m.party === 'group')).toBe(true);
+    expect(boosted({ hour: 19, day: 2 })).toEqual([]);
+  });
+
   it('규칙이 여러 개 맞아도 한 메뉴에 한 번만 더한다', () => {
     const { adjustments } = contextAdjustments(MENU_DATA, { hour: 23, weather: { condition: 'rain', temperature: 2 } });
     expect(Math.max(...Object.values(adjustments))).toBe(CONTEXT_BONUS);

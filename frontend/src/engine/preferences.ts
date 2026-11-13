@@ -5,6 +5,11 @@ import {
   LEARN_MIN_MEALS,
   LEARN_MIN_SHARE,
   LIKED_CUISINE_BONUS,
+  PROFILE_EVENING_START_HOUR,
+  PROFILE_MAX_BONUS,
+  PROFILE_MIN_MEALS,
+  PROFILE_REASON_LIFT,
+  PROFILE_WEIGHT,
   SPICY_LOVER_BONUS,
   SPICY_MILD_PENALTY_PER_LEVEL,
 } from './config';
@@ -63,6 +68,79 @@ export const learnedCuisines = (meals: CategoryMeal[], menus: MenuItem[], now: n
   return CUISINES.filter(c => (counts.get(c) ?? 0) / total >= LEARN_MIN_SHARE);
 };
 
+interface Trait {
+  value: (item: MenuItem) => string;
+  /** 값 → 이유 칩에 쓸 이름. 없는 값은 칩에 쓰지 않는다 */
+  labels: Record<string, string>;
+}
+
+const SPICY_TRAIT: Trait = { value: m => (m.spicy >= SPICY_TAG_LEVEL ? 'spicy' : 'mild'), labels: { spicy: '매운맛' } };
+const TRAITS: Trait[] = [
+  { value: m => m.base, labels: { rice: '밥', noodle: '면', bread: '빵', meat: '고기' } },
+  { value: m => (m.soup ? 'soup' : 'dry'), labels: { soup: '국물' } },
+  { value: m => m.weight, labels: { light: '가벼운 메뉴', heavy: '든든한 메뉴' } },
+  { value: m => m.temperature, labels: { cold: '시원한 메뉴' } },
+];
+
+const shares = (items: MenuItem[], trait: Trait): Map<string, number> => {
+  const counts = new Map<string, number>();
+  items.forEach(item => counts.set(trait.value(item), (counts.get(trait.value(item)) ?? 0) + 1));
+  counts.forEach((count, value) => counts.set(value, count / items.length));
+  return counts;
+};
+
+/** 평일·주말 × 낮·저녁 (기기 시각 기준) */
+const mealSlot = (time: number): string => {
+  const d = new Date(time);
+  const weekend = d.getDay() === 0 || d.getDay() === 6;
+  return `${weekend ? 'weekend' : 'weekday'}-${d.getHours() < PROFILE_EVENING_START_HOUR ? 'day' : 'evening'}`;
+};
+
+/**
+ * 최근 30일 기록에서 배운 속성별 취향 보정. 전체 메뉴에서의 비율보다 자주 먹은 속성은 올리고 덜 먹은 속성은 내린다.
+ * 지금과 같은 때(평일 낮, 주말 저녁 등)에 먹은 기록이 5개 이상이면 그 기록만 쓰고, 아니면 전체 기록을 쓴다.
+ * 기록 5개 이상일 때만. learnSpicy가 false면 맵기는 배우지 않는다 (직접 고른 매운맛 취향이 있을 때).
+ */
+export const profileAdjustments = (
+  menus: MenuItem[],
+  meals: CategoryMeal[],
+  now: number = Date.now(),
+  learnSpicy: boolean = true
+): PreferenceBoost => {
+  const byName = new Map(menus.map(m => [m.name, m]));
+  const recent = meals
+    .map(meal => ({ item: byName.get(meal.menuName), at: new Date(meal.createdAt).getTime() }))
+    .filter((m): m is { item: MenuItem; at: number } => !!m.item && now - m.at >= 0 && now - m.at <= LEARN_DAYS * DAY_MS);
+  const sameSlot = recent.filter(m => mealSlot(m.at) === mealSlot(now));
+  const eaten = (sameSlot.length >= PROFILE_MIN_MEALS ? sameSlot : recent).map(m => m.item);
+  const adjustments: Record<string, number> = {};
+  const reasons: Record<string, string[]> = {};
+  if (eaten.length < PROFILE_MIN_MEALS) return { adjustments, reasons };
+
+  const lifts = (learnSpicy ? [...TRAITS, SPICY_TRAIT] : TRAITS).map(trait => {
+    const mine = shares(eaten, trait);
+    const all = shares(menus, trait);
+    return { trait, lift: (value: string) => (mine.get(value) ?? 0) - (all.get(value) ?? 0) };
+  });
+
+  menus.forEach(item => {
+    let sum = 0;
+    let best: { label: string; lift: number } | null = null;
+    for (const { trait, lift } of lifts) {
+      const value = trait.value(item);
+      const l = lift(value);
+      sum += l;
+      const label = trait.labels[value];
+      if (label && l >= PROFILE_REASON_LIFT && (!best || l > best.lift)) best = { label, lift: l };
+    }
+    const delta = Math.max(-PROFILE_MAX_BONUS, Math.min(PROFILE_MAX_BONUS, sum * PROFILE_WEIGHT));
+    if (delta === 0) return;
+    adjustments[item.name] = delta;
+    if (delta > 0 && best) reasons[item.name] = [`요즘 자주 먹는 ${best.label}`];
+  });
+  return { adjustments, reasons };
+};
+
 export interface PreferenceBoost {
   /** 메뉴 이름 → 보정 점수 */
   adjustments: Record<string, number>;
@@ -73,6 +151,7 @@ export interface PreferenceBoost {
 /**
  * 취향 보정: 직접 고른 좋아하는 나라별 음식 +1 (안 골랐으면 기록에서 배운 것 +0.5),
  * "매운 거 좋아요"면 맵기 2 이상 +1, "안 매운 게 좋아요"면 맵기 1당 -0.5.
+ * 여기에 기록에서 배운 속성별 취향(profileAdjustments)을 더한다.
  */
 export const preferenceAdjustments = (
   menus: MenuItem[],
@@ -100,5 +179,7 @@ export const preferenceAdjustments = (
       add(item.name, SPICY_MILD_PENALTY_PER_LEVEL * item.spicy);
     }
   });
+  const profile = profileAdjustments(menus, meals, now, preferences.spicy === null || preferences.spicy === 'normal');
+  Object.entries(profile.adjustments).forEach(([name, delta]) => add(name, delta, profile.reasons[name]?.[0]));
   return { adjustments, reasons };
 };

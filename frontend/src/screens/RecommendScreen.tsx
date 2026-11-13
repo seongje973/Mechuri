@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
-import { addHistory, getAvoidTags, getFavorites, getHistories, getPreferences, isFavorite, toggleFavorite } from '../storage/userData';
+import { addHistory, addRejection, getAvoidTags, getFavorites, getHistories, getPreferences, getRejections, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,8 +33,11 @@ import { Question, QUESTIONS } from '../constants/akinatorQuestions';
 import { createScoreSession, rankCandidates } from '../engine/scoreEngine';
 import {
   RecommendResult,
+  REJECT_REASONS,
   RecommendSession,
+  RejectReason,
   answerQuestion,
+  applyRejectReason,
   canReject,
   getResults,
   rejectTopResult,
@@ -43,7 +46,7 @@ import {
   toRecommendSession
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
-import { personalAdjustments } from '../engine/personalize';
+import { personalAdjustments, popularAdjustments, rejectionAdjustments, similarMealAdjustments } from '../engine/personalize';
 import { RecommendContext, contextAdjustments, mergeAdjustments, mergeReasons } from '../engine/context';
 import { EMPTY_PREFERENCES, preferenceAdjustments } from '../engine/preferences';
 
@@ -97,6 +100,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
   const [contextReasons, setContextReasons] = useState<Record<string, string[]>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
+  // 방금 "틀렸어요"로 뺀 메뉴. 다음 질문에 답하기 전까지 이유를 고를 수 있다
+  const [rejectedMenu, setRejectedMenu] = useState<MenuItem | null>(null);
   // 추천을 시작할 때 미리 받아 두는 날씨 (L-02). 못 받으면 시간대만 쓴다
   const weatherRef = useRef<RecommendContext['weather']>(null);
   // 추천 한 판마다 올라가는 번호. 이전 판의 늦은 날씨 응답이 새 판을 덮지 않게 한다
@@ -106,6 +111,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 질문 화면에 떠 있는 판을 시작한 요청 번호. startRequestRef보다 작으면 새 시작이 진행 중이다
   const activeStartRequestRef = useRef(0);
   const weatherPromiseRef = useRef<Promise<void> | null>(null);
+  // 추천을 시작할 때 읽기 시작하는 개인화 보정. 다 읽으면 다음 질문 고르기와 멈춤 판단에도 쓴다
+  const personalPromiseRef = useRef<ReturnType<typeof loadAdjustments> | null>(null);
+  const priorRef = useRef<Record<string, number>>({});
+  // 먹어 본 메뉴 이름. 결과가 모두 먹어 본 메뉴면 대안 하나를 새 메뉴로 바꾸는 데 쓴다
+  const eatenRef = useRef<string[]>([]);
   // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const [favorited, setFavorited] = useState(false);
@@ -199,6 +209,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setAdjustments({});
     setContextReasons({});
     setWorldCupResults([]);
+    setRejectedMenu(null);
     setEatenMenus([]);
     setRestaurantsList([]);
     setGameState('intro');
@@ -262,10 +273,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const coords = userCoordsRef.current;
     weatherPromiseRef.current = coords ? loadWeather(coords, weatherRoundRef.current) : null;
     finishTokenRef.current += 1;
+    priorRef.current = {};
+    const personal = loadAdjustments();
+    personalPromiseRef.current = personal;
+    personal.then(p => {
+      if (personalPromiseRef.current === personal) priorRef.current = p.adjustments;
+    });
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
     setHistory([]);
+    setRejectedMenu(null);
     setSession(first);
     setGameState('questioning');
     goNext(first);
@@ -273,7 +291,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 다음 질문으로 가거나, 멈출 조건이면 결과로
   const goNext = (next: RecommendSession) => {
-    const question = shouldStop(next, QUESTIONS) ? null : pickNextQuestion(next, QUESTIONS);
+    const prior = priorRef.current;
+    const question = shouldStop(next, QUESTIONS, prior) ? null : pickNextQuestion(next, QUESTIONS, prior);
     if (question) {
       setCurrentQuestion(question);
     } else {
@@ -288,6 +307,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       payload: { questionId: currentQuestion.id, answer, index: session.answers.length }
     });
     const next = answerQuestion(session, currentQuestion, answer);
+    setRejectedMenu(null);
     setHistory([...history, { session, question: currentQuestion }]);
     setSession(next);
     goNext(next);
@@ -337,11 +357,18 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     clearTimeout(timer);
   };
 
-  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21), 취향 설정과 기록에서 배운 취향.
+  // 홈 화면과 같은 인기 순위. 못 받으면 빈 목록으로 둔다
+  const loadPopular = async (): Promise<{ menuName: string }[]> => {
+    const res = await apiFetch('/api/restaurants/ranking', { auth: false, timeoutMs: 3000 });
+    const data = res.ok ? await res.json() : {};
+    return Array.isArray(data.ranking) ? data.ranking : [];
+  };
+
+  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 거절한 메뉴 감점, 인기 메뉴 +0.25, 취향 설정과 기록에서 배운 취향.
   // 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
-  const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]> }> => {
+  const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]>; eaten: string[] }> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
-    const [histories, favorites, preferences] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences()]);
+    const [histories, favorites, preferences, rejections, popular] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences(), getRejections(), loadPopular()]);
     if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
     if (favorites.status === 'rejected') console.log("Failed to load favorites for adjustments", favorites.reason);
     if (preferences.status === 'rejected') console.log("Failed to load preferences for adjustments", preferences.reason);
@@ -355,7 +382,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       histories: meals,
       favorites: favorites.status === 'fulfilled' ? favorites.value : [],
     });
-    return { adjustments: mergeAdjustments(personal, taste.adjustments), reasons: taste.reasons };
+    return {
+      adjustments: mergeAdjustments(
+        personal,
+        similarMealAdjustments(meals, MENU_DATA),
+        rejectionAdjustments(rejections.status === 'fulfilled' ? rejections.value : [], MENU_DATA),
+        popularAdjustments(popular.status === 'fulfilled' ? popular.value : []),
+        taste.adjustments
+      ),
+      reasons: taste.reasons,
+      eaten: meals.map(m => m.menuName),
+    };
   };
 
   const showResults = (ranked: RecommendResult[], finalSession: RecommendSession | null, via?: 'worldcup') => {
@@ -398,8 +435,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     let reasons = contextReasons;
     if (finalSession.rejected.length === 0) {
       await waitForWeather();
-      const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
-      const personal = await loadAdjustments();
+      const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), day: new Date().getDay(), weather: weatherRef.current });
+      const personal = await (personalPromiseRef.current ?? loadAdjustments());
       // 날씨·보정값을 기다리는 사이 새 추천을 시작했거나, 답을 되돌렸거나, 화면을 떠났으면 이전 결과를 띄우지 않는다
       if (
         token !== finishTokenRef.current ||
@@ -409,10 +446,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       ) return;
       adj = mergeAdjustments(personal.adjustments, context.adjustments);
       reasons = mergeReasons(context.reasons, personal.reasons);
+      eatenRef.current = personal.eaten;
       setAdjustments(adj);
       setContextReasons(reasons);
     }
-    showResults(getResults(finalSession, QUESTIONS, adj, undefined, reasons), finalSession);
+    showResults(getResults(finalSession, QUESTIONS, adj, undefined, reasons, eatenRef.current), finalSession);
   };
 
   // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
@@ -422,13 +460,14 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const next = rejectTopResult(session, top.item.name);
     // retries는 이번 것을 포함한 "틀렸어요" 횟수. 뒤따르는 result_shown의 retries와 같다
     track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: next.rejected.length } });
+    addRejection(top.item.name).catch(e => console.log("Failed to save rejection", e));
     setHistory([]);
     setSession(next);
     setSelectedMenu(null);
     setRestaurantsList([]);
 
     if (session.rejected.length >= 1) {
-      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE, contextReasons);
+      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE, contextReasons, eatenRef.current);
       if (cup.length >= 2) {
         setWorldCupResults(cup);
         setGameState('worldcup');
@@ -436,7 +475,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       }
     }
     setResults([]);
+    setRejectedMenu(top.item);
     setGameState('questioning');
+    goNext(next);
+  };
+
+  // 거절한 이유를 점수에 반영하고 다음 질문을 다시 고른다
+  const handleRejectReason = (reason: RejectReason) => {
+    if (!session || !rejectedMenu) return;
+    const next = applyRejectReason(session, rejectedMenu, reason);
+    setRejectedMenu(null);
+    setSession(next);
     goNext(next);
   };
 
@@ -639,6 +688,19 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
               />
             </View>
           </View>
+
+          {rejectedMenu && (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>{rejectedMenu.name}, 왜 아니었나요? (안 골라도 돼요)</Text>
+              <View style={styles.conditionRow}>
+                {REJECT_REASONS.map(({ reason, label }) => (
+                  <TouchableOpacity key={reason} style={styles.conditionChip} onPress={() => handleRejectReason(reason)} activeOpacity={0.85}>
+                    <Text style={styles.conditionChipText}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
           <View style={styles.questionCard}>
             <View style={styles.questionMeta}>

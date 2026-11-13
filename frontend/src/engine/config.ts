@@ -12,14 +12,29 @@ export const ANSWER_SCORES: Record<ScoreAnswer, { match: number; miss: number }>
   no: { match: -2, miss: 1 },
 };
 
+/**
+ * 딱 맞지는 않지만 가까운 메뉴(맵기가 한 단계 모자람, 가볍게·든든하게 질문에서 무게가 보통)가 받는 점수의 위치.
+ * 0이면 miss, 1이면 match와 같다. 0.25면 "응"에 -1, "아니"에 +0.25.
+ */
+export const NEAR_MATCH_LEVEL = 0.25;
+
+/**
+ * 질문 속성별 점수 배율 (없으면 1). 밥·면·고기 같은 주재료는 크게, 가볍게·든든하게는 작게 반영한다.
+ * 키는 Question.attribute.
+ */
+export const ATTRIBUTE_WEIGHTS: Record<string, number> = { base: 1.5, weight: 0.5 };
+
 /** 질문은 최대 7개 (기획서 제품 원칙) */
 export const MAX_QUESTIONS = 7;
 /** 1위가 2위보다 이만큼 앞서면 바로 결과를 보여준다 */
 export const STOP_LEAD = 3;
 /** 맨 앞에 묻는 상황 질문 수 (인원·먹는 방식·예산 중) */
 export const SITUATION_QUESTION_LIMIT = 2;
-/** 다음 질문을 고를 때 반반으로 나눌 상위 후보 수 */
-export const SPLIT_TOP_N = 10;
+/**
+ * 다음 질문을 고를 때 점수를 "이 메뉴를 원할 확률"로 바꾸는 온도. 점수가 이만큼 높으면 확률이 e배.
+ * 작을수록 상위 후보만 보고 질문을 고른다.
+ */
+export const QUESTION_TEMPERATURE = 1;
 /** 결과에 보여줄 메뉴 수 (1위 + 대안 2개) */
 export const RESULT_SIZE = 3;
 /** "바로 결과 보기" 버튼을 보여주기 시작하는 질문 번호 */
@@ -41,6 +56,9 @@ export const RETRY_WORLDCUP_SIZE = 4;
 /** 즐겨찾기한 메뉴 보너스 (US-21) */
 export const FAVORITE_BONUS = 1;
 
+/** 요즘 많이 고른 메뉴(서버 인기 순위) 보너스. 다른 보정보다 작아서 동점을 가르는 정도로만 쓰인다 */
+export const POPULAR_BONUS = 0.25;
+
 /** 날씨·시간대 상황 보정 (L-02). 메뉴 하나에 상황 보정은 이 값까지만 */
 export const CONTEXT_BONUS = 1;
 /** 결과를 낼 때 아직 안 온 날씨를 기다리는 최대 시간 */
@@ -51,6 +69,16 @@ export const COLD_DAY_TEMP = 5;
 /** 늦은 밤: 22시 ~ 다음 날 4시 */
 export const LATE_NIGHT_START_HOUR = 22;
 export const LATE_NIGHT_END_HOUR = 4;
+
+/** 아침: 5시 ~ 10시 */
+export const BREAKFAST_START_HOUR = 5;
+export const BREAKFAST_END_HOUR = 10;
+/** 평일 점심: 월~금 11시 ~ 14시 */
+export const LUNCH_START_HOUR = 11;
+export const LUNCH_END_HOUR = 14;
+/** 금·토 저녁: 17시 ~ 22시 */
+export const DINNER_START_HOUR = 17;
+export const DINNER_END_HOUR = 22;
 
 /** 취향 설정에서 고른 좋아하는 나라별 음식 보너스 */
 export const LIKED_CUISINE_BONUS = 1;
@@ -65,3 +93,33 @@ export const LEARN_MIN_SHARE = 0.4;
 /** 매운맛 취향: "매운 거 좋아요"면 맵기 2 이상 메뉴 보너스, "안 매운 게 좋아요"면 맵기 1당 감점 */
 export const SPICY_LOVER_BONUS = 1;
 export const SPICY_MILD_PENALTY_PER_LEVEL = -0.5;
+
+/** 기록에서 배우는 속성별 취향(주재료·국물·맵기·무게·온도). 이만큼은 먹은 기록이 있어야 배운다 */
+export const PROFILE_MIN_MEALS = 5;
+/** 이 시각부터는 저녁으로 본다. 지금과 같은 때(평일·주말 × 낮·저녁)의 기록이 충분하면 그 기록만으로 배운다 */
+export const PROFILE_EVENING_START_HOUR = 15;
+/** (내 기록에서의 비율 - 전체 메뉴에서의 비율) 1.0당 점수 */
+export const PROFILE_WEIGHT = 2;
+/** 속성별 취향 보정은 메뉴 하나에 이 값까지만 (위·아래 모두) */
+export const PROFILE_MAX_BONUS = 1.5;
+/** 비율 차이가 이만큼은 나야 결과 이유 칩에 쓴다 */
+export const PROFILE_REASON_LIFT = 0.2;
+
+/** 6개 속성(나라·주재료·국물·맵기·온도·무게) 중 이만큼 같으면 "비슷한 메뉴"로 본다 */
+export const SIMILAR_MIN_SHARED = 5;
+/** 최근에 먹은 메뉴와 비슷한 메뉴 감점. 같은 메뉴 감점(RECENT_MEAL_PENALTY)보다 약하고 짧게 */
+export const SIMILAR_MEAL_PENALTY = -1;
+export const SIMILAR_MEAL_DAYS = 2;
+
+/** "틀렸어요"로 거절한 메뉴 감점: 최근 이 기간의 거절 한 번마다, 메뉴 하나에 REJECT_MAX_PENALTY까지 */
+export const REJECT_LEARN_DAYS = 14;
+export const REJECT_PENALTY = -1;
+export const REJECT_MAX_PENALTY = -3;
+/** 거절한 메뉴와 비슷한 메뉴 감점 (한 번만) */
+export const REJECT_SIMILAR_PENALTY = -0.5;
+
+/** 결과가 모두 먹어 본 메뉴면 마지막 대안을 안 먹어 본 메뉴로 바꾼다. 점수가 이만큼까지 낮아도 바꾼다 */
+export const NOVELTY_SCORE_WINDOW = 2;
+
+/** "틀렸어요" 뒤에 고른 이유에 해당하는 남은 후보 감점 (이번 추천에서만) */
+export const REJECT_REASON_PENALTY = -2;
