@@ -5,6 +5,7 @@ import { MAX_QUESTIONS, MAX_REASON_CHIPS, RETRY_EXTRA_QUESTIONS, RETRY_MIN_QUEST
 import {
   RecommendSession,
   answerQuestion,
+  applyRejectReason,
   canReject,
   rejectTopResult,
   worldCupCandidates,
@@ -245,6 +246,16 @@ describe('"틀렸어요"로 다시 좁히기 (US-15)', () => {
     const retried = rejectTopResult(s, top);
     expect(retried.minAnswers).toBe(s.answers.length + RETRY_MIN_QUESTIONS);
     expect(shouldStop(retried, QUESTIONS)).toBe(false);
+  });
+
+  it('거절한 이유를 고르면 그 점이 같은 남은 후보를 감점한다', () => {
+    const s = rejectTopResult(start([byName('삼겹살'), byName('족발'), byName('김치찌개'), byName('된장찌개'), byName('초밥')]), '삼겹살');
+    const pork = byName('삼겹살'); // 든든, 1~2만원
+    expect(applyRejectReason(s, pork, 'heavy').scores).toMatchObject({ 족발: -2, 김치찌개: 0, 초밥: 0 });
+    expect(applyRejectReason(s, pork, 'pricey').scores).toMatchObject({ 족발: -2, 김치찌개: 0 });
+    expect(applyRejectReason(s, byName('김치찌개'), 'similar').scores).toMatchObject({ 된장찌개: -2, 초밥: 0 });
+    // 이미 가장 싼 메뉴를 거절했으면 그대로
+    expect(applyRejectReason(s, byName('김치찌개'), 'pricey').scores).toEqual(s.scores);
   });
 
   it('후보가 1개뿐이면 뺄 수 없다', () => {

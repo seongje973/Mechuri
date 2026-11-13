@@ -33,8 +33,11 @@ import { Question, QUESTIONS } from '../constants/akinatorQuestions';
 import { createScoreSession, rankCandidates } from '../engine/scoreEngine';
 import {
   RecommendResult,
+  REJECT_REASONS,
   RecommendSession,
+  RejectReason,
   answerQuestion,
+  applyRejectReason,
   canReject,
   getResults,
   rejectTopResult,
@@ -97,6 +100,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
   const [contextReasons, setContextReasons] = useState<Record<string, string[]>>({});
   const [worldCupResults, setWorldCupResults] = useState<RecommendResult[]>([]);
+  // 방금 "틀렸어요"로 뺀 메뉴. 다음 질문에 답하기 전까지 이유를 고를 수 있다
+  const [rejectedMenu, setRejectedMenu] = useState<MenuItem | null>(null);
   // 추천을 시작할 때 미리 받아 두는 날씨 (L-02). 못 받으면 시간대만 쓴다
   const weatherRef = useRef<RecommendContext['weather']>(null);
   // 추천 한 판마다 올라가는 번호. 이전 판의 늦은 날씨 응답이 새 판을 덮지 않게 한다
@@ -204,6 +209,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setAdjustments({});
     setContextReasons({});
     setWorldCupResults([]);
+    setRejectedMenu(null);
     setEatenMenus([]);
     setRestaurantsList([]);
     setGameState('intro');
@@ -277,6 +283,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
     setHistory([]);
+    setRejectedMenu(null);
     setSession(first);
     setGameState('questioning');
     goNext(first);
@@ -300,6 +307,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       payload: { questionId: currentQuestion.id, answer, index: session.answers.length }
     });
     const next = answerQuestion(session, currentQuestion, answer);
+    setRejectedMenu(null);
     setHistory([...history, { session, question: currentQuestion }]);
     setSession(next);
     goNext(next);
@@ -459,7 +467,17 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       }
     }
     setResults([]);
+    setRejectedMenu(top.item);
     setGameState('questioning');
+    goNext(next);
+  };
+
+  // 거절한 이유를 점수에 반영하고 다음 질문을 다시 고른다
+  const handleRejectReason = (reason: RejectReason) => {
+    if (!session || !rejectedMenu) return;
+    const next = applyRejectReason(session, rejectedMenu, reason);
+    setRejectedMenu(null);
+    setSession(next);
     goNext(next);
   };
 
@@ -662,6 +680,19 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
               />
             </View>
           </View>
+
+          {rejectedMenu && (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>{rejectedMenu.name}, 왜 아니었나요? (안 골라도 돼요)</Text>
+              <View style={styles.conditionRow}>
+                {REJECT_REASONS.map(({ reason, label }) => (
+                  <TouchableOpacity key={reason} style={styles.conditionChip} onPress={() => handleRejectReason(reason)} activeOpacity={0.85}>
+                    <Text style={styles.conditionChipText}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
           <View style={styles.questionCard}>
             <View style={styles.questionMeta}>

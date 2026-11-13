@@ -117,3 +117,6 @@ export const REJECT_SIMILAR_PENALTY = -0.5;
 
 /** 결과가 모두 먹어 본 메뉴면 마지막 대안을 안 먹어 본 메뉴로 바꾼다. 점수가 이만큼까지 낮아도 바꾼다 */
 export const NOVELTY_SCORE_WINDOW = 2;
+
+/** "틀렸어요" 뒤에 고른 이유에 해당하는 남은 후보 감점 (이번 추천에서만) */
+export const REJECT_REASON_PENALTY = -2;

@@ -345,6 +345,20 @@ describe('RecommendScreen', () => {
     expect(shownTop()).not.toBe(first);
   });
 
+  it('틀렸어요 뒤 다음 질문에서 이유를 고를 수 있고, 고르거나 답하면 사라진다', async () => {
+    await reachReveal();
+    const first = shownTop();
+    await act(async () => {
+      fireEvent.press(screen.getByText('틀렸어요 🙅'));
+    });
+    expect(screen.getByText(`${first}, 왜 아니었나요? (안 골라도 돼요)`)).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByText('너무 무거워요'));
+    });
+    expect(screen.queryByText('너무 무거워요')).toBeNull();
+    expect(screen.getByText('응')).toBeTruthy();
+  });
+
   it('먹을래요 저장 중에 마지막 답을 고치면 새 결과에 맛있게 드세요가 뜨지 않는다', async () => {
     const { addHistory } = jest.requireMock('../../storage/userData');
     await reachReveal();

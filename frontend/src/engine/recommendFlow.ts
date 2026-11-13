@@ -9,6 +9,7 @@ import {
   RETRY_MIN_QUESTIONS,
   RETRY_WORLDCUP_SIZE,
   QUESTION_TEMPERATURE,
+  REJECT_REASON_PENALTY,
   SITUATION_QUESTION_LIMIT,
   STOP_LEAD,
   ScoreAnswer,
@@ -187,6 +188,40 @@ export const rejectTopResult = (session: RecommendSession, menuName: string): Re
     questionLimit: session.answers.length + RETRY_EXTRA_QUESTIONS,
     minAnswers: session.answers.length + RETRY_MIN_QUESTIONS,
   };
+};
+
+export type RejectReason = 'heavy' | 'pricey' | 'similar';
+
+/** "틀렸어요" 뒤에 한 번 탭으로 고르는 이유 (선택) */
+export const REJECT_REASONS: { reason: RejectReason; label: string }[] = [
+  { reason: 'heavy', label: '너무 무거워요' },
+  { reason: 'pricey', label: '비싸요' },
+  { reason: 'similar', label: '비슷한 걸 최근에 먹었어요' },
+];
+
+const WEIGHT_RANK = { light: 0, normal: 1, heavy: 2 };
+const PRICE_RANK = { low: 0, mid: 1, high: 2 };
+
+/**
+ * 거절한 이유를 남은 후보에 반영한다: 거절한 메뉴만큼 무겁거나(비싸거나) 비슷한 후보를 감점한다.
+ * 이미 가장 가벼운(싼) 메뉴를 거절했으면 바꿀 것이 없다. 이번 추천의 점수만 바꾼다.
+ */
+export const applyRejectReason = (session: RecommendSession, rejected: MenuItem, reason: RejectReason): RecommendSession => {
+  const hit = (item: MenuItem): boolean => {
+    switch (reason) {
+      case 'heavy':
+        return rejected.weight !== 'light' && WEIGHT_RANK[item.weight] >= WEIGHT_RANK[rejected.weight];
+      case 'pricey':
+        return rejected.price !== 'low' && PRICE_RANK[item.price] >= PRICE_RANK[rejected.price];
+      case 'similar':
+        return isSimilarMenu(rejected, item);
+    }
+  };
+  const scores = { ...session.scores };
+  session.candidates.forEach(item => {
+    if (hit(item)) scores[item.name] += REJECT_REASON_PENALTY;
+  });
+  return { ...session, scores };
 };
 
 /** 두 번째 "틀렸어요" 뒤 제안하는 월드컵 후보: 남은 후보 중 상위 4개 */
