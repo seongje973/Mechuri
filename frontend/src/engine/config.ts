@@ -52,6 +52,16 @@ export const COLD_DAY_TEMP = 5;
 export const LATE_NIGHT_START_HOUR = 22;
 export const LATE_NIGHT_END_HOUR = 4;
 
+/** 아침: 5시 ~ 10시 */
+export const BREAKFAST_START_HOUR = 5;
+export const BREAKFAST_END_HOUR = 10;
+/** 평일 점심: 월~금 11시 ~ 14시 */
+export const LUNCH_START_HOUR = 11;
+export const LUNCH_END_HOUR = 14;
+/** 금·토 저녁: 17시 ~ 22시 */
+export const DINNER_START_HOUR = 17;
+export const DINNER_END_HOUR = 22;
+
 /** 취향 설정에서 고른 좋아하는 나라별 음식 보너스 */
 export const LIKED_CUISINE_BONUS = 1;
 /** 기록에서 배운 "요즘 자주 먹는" 나라별 음식 보너스. 직접 고른 취향보다 약하게 */

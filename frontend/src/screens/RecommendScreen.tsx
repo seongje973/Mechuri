@@ -411,7 +411,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     let reasons = contextReasons;
     if (finalSession.rejected.length === 0) {
       await waitForWeather();
-      const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
+      const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), day: new Date().getDay(), weather: weatherRef.current });
       const personal = await (personalPromiseRef.current ?? loadAdjustments());
       // 날씨·보정값을 기다리는 사이 새 추천을 시작했거나, 답을 되돌렸거나, 화면을 떠났으면 이전 결과를 띄우지 않는다
       if (
