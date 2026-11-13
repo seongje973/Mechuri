@@ -90,3 +90,10 @@ export const SIMILAR_MIN_SHARED = 5;
 /** 최근에 먹은 메뉴와 비슷한 메뉴 감점. 같은 메뉴 감점(RECENT_MEAL_PENALTY)보다 약하고 짧게 */
 export const SIMILAR_MEAL_PENALTY = -1;
 export const SIMILAR_MEAL_DAYS = 2;
+
+/** "틀렸어요"로 거절한 메뉴 감점: 최근 이 기간의 거절 한 번마다, 메뉴 하나에 REJECT_MAX_PENALTY까지 */
+export const REJECT_LEARN_DAYS = 14;
+export const REJECT_PENALTY = -1;
+export const REJECT_MAX_PENALTY = -3;
+/** 거절한 메뉴와 비슷한 메뉴 감점 (한 번만) */
+export const REJECT_SIMILAR_PENALTY = -0.5;

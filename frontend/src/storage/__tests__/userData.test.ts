@@ -2,12 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveSession } from '../../api/client';
 import {
   GUEST_KEYS,
+  REJECTIONS_KEY,
   addHistory,
+  addRejection,
   deleteAccount,
   getAvoidTags,
   getFavorites,
   getHistories,
   getPreferences,
+  getRejections,
   getStats,
   importGuestData,
   setAvoidTags,
@@ -21,6 +24,17 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+
+describe('거절 기록', () => {
+  beforeEach(() => AsyncStorage.clear());
+
+  it('로그인 여부와 관계없이 기기에 최신순으로 쌓인다', async () => {
+    await addRejection('짬뽕');
+    await saveSession('jwt-1', { id: 1 });
+    await addRejection('초밥');
+    expect((await getRejections()).map(r => r.menuName)).toEqual(['초밥', '짬뽕']);
+  });
+});
 
 describe('게스트 저장소', () => {
   const fetchMock = jest.fn();
@@ -291,10 +305,12 @@ describe('회원 탈퇴', () => {
 
   it('서버의 DELETE /api/user/account를 부르고 기기 기록도 지운다', async () => {
     await AsyncStorage.setItem(GUEST_KEYS.histories, '[]');
+    await addRejection('짬뽕');
     await saveSession('jwt-1', { id: 1 });
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) });
 
     await deleteAccount();
+    expect(await AsyncStorage.getItem(REJECTIONS_KEY)).toBeNull();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toMatch(/\/api\/user\/account$/);
     expect(init.method).toBe('DELETE');

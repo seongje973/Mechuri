@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { apiFetch } from '../api/client';
-import { addHistory, getAvoidTags, getFavorites, getHistories, getPreferences, isFavorite, toggleFavorite } from '../storage/userData';
+import { addHistory, addRejection, getAvoidTags, getFavorites, getHistories, getPreferences, getRejections, isFavorite, toggleFavorite } from '../storage/userData';
 import { MenuItem, MENU_DATA, CUISINES, Cuisine } from '../constants/menuData';
 import MiniWorldCup from '../components/MiniWorldCup';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,7 +43,7 @@ import {
   toRecommendSession
 } from '../engine/recommendFlow';
 import { RETRY_WORLDCUP_SIZE, SHOW_SKIP_FROM_QUESTION, ScoreAnswer, WEATHER_WAIT_MS } from '../engine/config';
-import { personalAdjustments, similarMealAdjustments } from '../engine/personalize';
+import { personalAdjustments, rejectionAdjustments, similarMealAdjustments } from '../engine/personalize';
 import { RecommendContext, contextAdjustments, mergeAdjustments, mergeReasons } from '../engine/context';
 import { EMPTY_PREFERENCES, preferenceAdjustments } from '../engine/preferences';
 
@@ -347,11 +347,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     clearTimeout(timer);
   };
 
-  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 취향 설정과 기록에서 배운 취향.
+  // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 거절한 메뉴 감점, 취향 설정과 기록에서 배운 취향.
   // 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
   const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]> }> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
-    const [histories, favorites, preferences] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences()]);
+    const [histories, favorites, preferences, rejections] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences(), getRejections()]);
     if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
     if (favorites.status === 'rejected') console.log("Failed to load favorites for adjustments", favorites.reason);
     if (preferences.status === 'rejected') console.log("Failed to load preferences for adjustments", preferences.reason);
@@ -366,7 +366,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       favorites: favorites.status === 'fulfilled' ? favorites.value : [],
     });
     return {
-      adjustments: mergeAdjustments(personal, similarMealAdjustments(meals, MENU_DATA), taste.adjustments),
+      adjustments: mergeAdjustments(
+        personal,
+        similarMealAdjustments(meals, MENU_DATA),
+        rejectionAdjustments(rejections.status === 'fulfilled' ? rejections.value : [], MENU_DATA),
+        taste.adjustments
+      ),
       reasons: taste.reasons,
     };
   };
@@ -435,6 +440,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const next = rejectTopResult(session, top.item.name);
     // retries는 이번 것을 포함한 "틀렸어요" 횟수. 뒤따르는 result_shown의 retries와 같다
     track(analyticsSessionRef.current, { type: 'reject', payload: { menu: top.item.name, retries: next.rejected.length } });
+    addRejection(top.item.name).catch(e => console.log("Failed to save rejection", e));
     setHistory([]);
     setSession(next);
     setSelectedMenu(null);

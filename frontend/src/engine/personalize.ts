@@ -1,5 +1,15 @@
 import { MenuItem } from '../constants/menuData';
-import { FAVORITE_BONUS, RECENT_MEAL_DAYS, RECENT_MEAL_PENALTY, SIMILAR_MEAL_DAYS, SIMILAR_MEAL_PENALTY } from './config';
+import {
+  FAVORITE_BONUS,
+  RECENT_MEAL_DAYS,
+  RECENT_MEAL_PENALTY,
+  REJECT_LEARN_DAYS,
+  REJECT_MAX_PENALTY,
+  REJECT_PENALTY,
+  REJECT_SIMILAR_PENALTY,
+  SIMILAR_MEAL_DAYS,
+  SIMILAR_MEAL_PENALTY,
+} from './config';
 import { isSimilarMenu } from './similarity';
 
 export interface MealRecord {
@@ -38,6 +48,29 @@ export const similarMealAdjustments = (meals: MealRecord[], menus: MenuItem[], n
   menus.forEach(item => {
     if (!recent.includes(item) && recent.some(eaten => isSimilarMenu(eaten, item))) {
       adjustments[item.name] = SIMILAR_MEAL_PENALTY;
+    }
+  });
+  return adjustments;
+};
+
+/**
+ * 최근 14일 안에 "틀렸어요"로 거절한 메뉴는 거절한 횟수만큼 감점하고(-3까지), 비슷한 메뉴도 약하게 감점한다.
+ * rejections: 거절한 메뉴 이름과 시각
+ */
+export const rejectionAdjustments = (rejections: MealRecord[], menus: MenuItem[], now: number = Date.now()): Record<string, number> => {
+  const counts = new Map<string, number>();
+  rejections.forEach(r => {
+    const elapsed = now - new Date(r.createdAt).getTime();
+    if (elapsed >= 0 && elapsed <= REJECT_LEARN_DAYS * DAY_MS) counts.set(r.menuName, (counts.get(r.menuName) ?? 0) + 1);
+  });
+  const rejected = menus.filter(m => counts.has(m.name));
+  const adjustments: Record<string, number> = {};
+  menus.forEach(item => {
+    const count = counts.get(item.name);
+    if (count) {
+      adjustments[item.name] = Math.max(REJECT_MAX_PENALTY, count * REJECT_PENALTY);
+    } else if (rejected.some(r => isSimilarMenu(r, item))) {
+      adjustments[item.name] = REJECT_SIMILAR_PENALTY;
     }
   });
   return adjustments;

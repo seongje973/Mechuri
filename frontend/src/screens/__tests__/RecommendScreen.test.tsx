@@ -16,10 +16,12 @@ jest.mock('../../analytics/events', () => ({
 
 jest.mock('../../storage/userData', () => ({
   addHistory: jest.fn(async () => {}),
+  addRejection: jest.fn(async () => {}),
   getAvoidTags: jest.fn(async () => []),
   getFavorites: jest.fn(async () => []),
   getHistories: jest.fn(async () => []),
   getPreferences: jest.fn(async () => null),
+  getRejections: jest.fn(async () => []),
   isFavorite: jest.fn(async () => false),
   toggleFavorite: jest.fn(async () => ({ favorited: true, count: 1 })),
 }));
@@ -326,6 +328,21 @@ describe('RecommendScreen', () => {
     });
     const reject = track.mock.calls.find((c: any[]) => c[1].type === 'reject');
     expect(reject[1].payload.retries).toBe(1);
+  });
+
+  it('틀렸어요로 거절한 메뉴를 기기에 기록하고, 다음 추천에서 감점한다', async () => {
+    const { addRejection, getRejections } = jest.requireMock('../../storage/userData');
+    await reachReveal();
+    const first = shownTop();
+    await act(async () => {
+      fireEvent.press(screen.getByText('틀렸어요 🙅'));
+    });
+    expect(addRejection).toHaveBeenCalledWith(first);
+    screen.unmount();
+
+    getRejections.mockResolvedValueOnce([1, 2, 3].map(() => ({ menuName: first, createdAt: new Date().toISOString() })));
+    await reachReveal();
+    expect(shownTop()).not.toBe(first);
   });
 
   it('먹을래요 저장 중에 마지막 답을 고치면 새 결과에 맛있게 드세요가 뜨지 않는다', async () => {

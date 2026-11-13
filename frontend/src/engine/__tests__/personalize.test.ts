@@ -2,7 +2,7 @@ import { MENU_DATA } from '../../constants/menuData';
 import { QUESTIONS } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
 import { answerQuestion, getResults, toRecommendSession } from '../recommendFlow';
-import { personalAdjustments, recentMealAdjustments, similarMealAdjustments } from '../personalize';
+import { personalAdjustments, recentMealAdjustments, rejectionAdjustments, similarMealAdjustments } from '../personalize';
 
 describe('recentMealAdjustments', () => {
   it('3일 이내에 먹은 메뉴만 한 번씩 -2', () => {
@@ -34,6 +34,28 @@ describe('similarMealAdjustments', () => {
 
   it('2일이 지났으면 감점하지 않는다', () => {
     expect(similarMealAdjustments([{ menuName: '김치찌개', createdAt: '2026-11-07T12:00:00Z' }], MENU_DATA, now)).toEqual({});
+  });
+});
+
+describe('rejectionAdjustments', () => {
+  const now = new Date('2026-11-10T12:00:00Z').getTime();
+  const at = (day: string) => `2026-11-${day}T12:00:00Z`;
+
+  it('14일 안에 거절한 횟수만큼 -1씩 최대 -3, 비슷한 메뉴는 -0.5', () => {
+    const adj = rejectionAdjustments(
+      [
+        { menuName: '김치찌개', createdAt: at('09') },
+        { menuName: '김치찌개', createdAt: at('05') },
+        { menuName: '초밥', createdAt: '2026-10-20T12:00:00Z' }, // 14일 지남
+        ...['09', '08', '07', '06'].map(d => ({ menuName: '피자', createdAt: at(d) })),
+      ],
+      MENU_DATA,
+      now
+    );
+    expect(adj['김치찌개']).toBe(-2);
+    expect(adj['피자']).toBe(-3);
+    expect(adj['된장찌개']).toBe(-0.5);
+    expect(adj['초밥']).toBeUndefined();
   });
 });
 

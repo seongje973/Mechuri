@@ -42,6 +42,15 @@ export const GUEST_KEYS = {
   preferences: 'guest_preferences',
 } as const;
 
+/** "틀렸어요"로 거절한 메뉴. 로그인 여부와 관계없이 이 기기에만 둔다 (서버로 옮기지 않는다) */
+export const REJECTIONS_KEY = 'rejected_menus';
+
+export interface RejectionEntry {
+  menuName: string;
+  /** ISO 시각 */
+  createdAt: string;
+}
+
 /** 서버도 최근 50개만 돌려준다 */
 export const HISTORY_LIMIT = 50;
 
@@ -231,6 +240,16 @@ export const setPreferences = async (preferences: TastePreferences): Promise<Tas
   return normalizePreferences(data.preferences);
 };
 
+// --- 거절 기록 ---
+
+/** 최신순 */
+export const getRejections = (): Promise<RejectionEntry[]> => readList<RejectionEntry>(REJECTIONS_KEY);
+
+export const addRejection = async (menuName: string): Promise<void> => {
+  const list = await readList<RejectionEntry>(REJECTIONS_KEY);
+  await writeList(REJECTIONS_KEY, [{ menuName, createdAt: new Date().toISOString() }, ...list].slice(0, HISTORY_LIMIT));
+};
+
 // --- 통계 ---
 
 export const getStats = async (): Promise<UserStats> => {
@@ -302,11 +321,11 @@ export const importGuestData = (): Promise<GuestImportResult> => withGuestLock(a
 // --- 회원 탈퇴 ---
 
 /**
- * 서버에서 계정과 기록을 모두 지우고, 이 기기에 남은 게스트 기록도 지운다.
+ * 서버에서 계정과 기록을 모두 지우고, 이 기기에 남은 게스트 기록과 거절 기록도 지운다.
  * 로그인 세션은 부른 쪽(AppNavigator의 로그아웃)이 지운다.
  */
 export const deleteAccount = async (): Promise<void> => {
   if (await isGuest()) throw new Error('Not logged in');
   await requestJson('/api/user/account', { method: 'DELETE', timeoutMs: 10000 });
-  await AsyncStorage.multiRemove(Object.values(GUEST_KEYS));
+  await AsyncStorage.multiRemove([...Object.values(GUEST_KEYS), REJECTIONS_KEY]);
 };
