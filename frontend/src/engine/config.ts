@@ -112,3 +112,6 @@ export const REJECT_PENALTY = -1;
 export const REJECT_MAX_PENALTY = -3;
 /** 거절한 메뉴와 비슷한 메뉴 감점 (한 번만) */
 export const REJECT_SIMILAR_PENALTY = -0.5;
+
+/** 결과가 모두 먹어 본 메뉴면 마지막 대안을 안 먹어 본 메뉴로 바꾼다. 점수가 이만큼까지 낮아도 바꾼다 */
+export const NOVELTY_SCORE_WINDOW = 2;

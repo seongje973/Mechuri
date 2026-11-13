@@ -3,6 +3,7 @@ import { Question, matchesQuestion } from '../constants/akinatorQuestions';
 import {
   MAX_QUESTIONS,
   MAX_REASON_CHIPS,
+  NOVELTY_SCORE_WINDOW,
   RESULT_SIZE,
   RETRY_EXTRA_QUESTIONS,
   RETRY_MIN_QUESTIONS,
@@ -206,13 +207,15 @@ export interface RecommendResult extends RankedMenu {
  * adjustments: 메뉴 이름 → 점수 보정 (최근 먹은 메뉴 감점 등, S4에서 즐겨찾기까지 확장)
  * size: 몇 개까지 (기본 1위 + 대안 2개, 월드컵 제안은 4개)
  * extraReasons: 메뉴 이름 → 덧붙일 이유 (날씨·시간대, 취향 보정 등)
+ * eaten: 먹어 본 메뉴 이름. 결과가 모두 먹어 본 메뉴면 마지막 대안을 점수가 비슷한 안 먹어 본 메뉴로 바꾼다.
  */
 export const getResults = (
   session: RecommendSession,
   questions: Question[],
   adjustments: Record<string, number> = {},
   size: number = RESULT_SIZE,
-  extraReasons: Record<string, string | string[]> = {}
+  extraReasons: Record<string, string | string[]> = {},
+  eaten: string[] = []
 ): RecommendResult[] => {
   const byId = new Map(questions.map(q => [q.id, q]));
   const ranked = rankAdjusted(session, adjustments);
@@ -222,7 +225,23 @@ export const getResults = (
     if (picked.length >= size) break;
     (picked.some(p => isSimilarMenu(p.item, r.item)) ? skipped : picked).push(r);
   }
-  return [...picked, ...skipped.slice(0, size - picked.length)]
+  const results = [...picked, ...skipped.slice(0, size - picked.length)];
+  let fresh: string | null = null;
+  if (results.length >= 2 && results.every(r => eaten.includes(r.item.name))) {
+    const last = results[results.length - 1];
+    const kept = results.slice(0, -1);
+    const candidate = ranked.find(
+      r =>
+        !eaten.includes(r.item.name) &&
+        r.finalScore >= last.finalScore - NOVELTY_SCORE_WINDOW &&
+        !kept.some(k => isSimilarMenu(k.item, r.item))
+    );
+    if (candidate) {
+      results[results.length - 1] = candidate;
+      fresh = candidate.item.name;
+    }
+  }
+  return results
     .map(r => {
       const tasteReasons = r.contributions
         .filter(c => c.delta > 0)
@@ -234,7 +253,7 @@ export const getResults = (
         .filter((text): text is string => !!text);
       const base = Array.from(new Set([...tasteReasons, ...session.situationReasons]));
       // 날씨·시간대·취향 보정은 점수에 들어갔으니 칩이 꽉 차도 자리를 남겨 둔다 (답에서 나온 이유도 하나는 남김)
-      const extra = Array.from(new Set(([] as string[]).concat(extraReasons[r.item.name] ?? [])))
+      const extra = Array.from(new Set(([] as string[]).concat(r.item.name === fresh ? '안 먹어 본 메뉴' : [], extraReasons[r.item.name] ?? [])))
         .filter(text => !base.includes(text))
         .slice(0, base.length > 0 ? MAX_REASON_CHIPS - 1 : MAX_REASON_CHIPS);
       const unique = [...base.slice(0, MAX_REASON_CHIPS - extra.length), ...extra];

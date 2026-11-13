@@ -190,6 +190,19 @@ describe('결과와 추천 이유 (US-12)', () => {
     expect(getResults(start(menus.slice(0, 3)), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '된장찌개']);
   });
 
+  it('결과가 모두 먹어 본 메뉴면 마지막 대안을 안 먹어 본 메뉴로 바꾼다', () => {
+    const menus = [byName('김치찌개'), byName('초밥'), byName('피자'), byName('짜장면')];
+    const plain = getResults(start(menus), QUESTIONS);
+    expect(plain.map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
+
+    const results = getResults(start(menus), QUESTIONS, {}, undefined, {}, ['김치찌개', '초밥', '피자']);
+    expect(results.map(r => r.item.name)).toEqual(['김치찌개', '초밥', '짜장면']);
+    expect(results[2].reasons).toContain('안 먹어 본 메뉴');
+    // 점수가 많이 낮은 메뉴로는 바꾸지 않는다
+    const low = getResults(start(menus), QUESTIONS, { 짜장면: -3 }, undefined, {}, ['김치찌개', '초밥', '피자']);
+    expect(low.map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
+  });
+
   it('아무 답도 점수를 올리지 않았으면 나라별 분류를 이유로 보여준다', () => {
     const results = getResults(start(), QUESTIONS);
     results.forEach(r => expect(r.reasons).toEqual([r.item.category]));

@@ -109,6 +109,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 추천을 시작할 때 읽기 시작하는 개인화 보정. 다 읽으면 다음 질문 고르기와 멈춤 판단에도 쓴다
   const personalPromiseRef = useRef<ReturnType<typeof loadAdjustments> | null>(null);
   const priorRef = useRef<Record<string, number>>({});
+  // 먹어 본 메뉴 이름. 결과가 모두 먹어 본 메뉴면 대안 하나를 새 메뉴로 바꾸는 데 쓴다
+  const eatenRef = useRef<string[]>([]);
   // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const [favorited, setFavorited] = useState(false);
@@ -349,7 +351,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 즐겨찾기 +1, 최근 먹은 메뉴 -2 (US-21)와 비슷한 메뉴 -1, 거절한 메뉴 감점, 취향 설정과 기록에서 배운 취향.
   // 게스트는 기기, 로그인은 서버 기록을 저장소가 알아서 읽는다
-  const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]> }> => {
+  const loadAdjustments = async (): Promise<{ adjustments: Record<string, number>; reasons: Record<string, string[]>; eaten: string[] }> => {
     // 하나가 실패해도 나머지 기록으로 보정한다
     const [histories, favorites, preferences, rejections] = await Promise.allSettled([getHistories(), getFavorites(), getPreferences(), getRejections()]);
     if (histories.status === 'rejected') console.log("Failed to load histories for adjustments", histories.reason);
@@ -373,6 +375,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
         taste.adjustments
       ),
       reasons: taste.reasons,
+      eaten: meals.map(m => m.menuName),
     };
   };
 
@@ -427,10 +430,11 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
       ) return;
       adj = mergeAdjustments(personal.adjustments, context.adjustments);
       reasons = mergeReasons(context.reasons, personal.reasons);
+      eatenRef.current = personal.eaten;
       setAdjustments(adj);
       setContextReasons(reasons);
     }
-    showResults(getResults(finalSession, QUESTIONS, adj, undefined, reasons), finalSession);
+    showResults(getResults(finalSession, QUESTIONS, adj, undefined, reasons, eatenRef.current), finalSession);
   };
 
   // "틀렸어요" (US-15): 1위를 빼고 질문을 2~3개 더. 두 번째부터는 남은 상위 4개로 월드컵
@@ -447,7 +451,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     setRestaurantsList([]);
 
     if (session.rejected.length >= 1) {
-      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE, contextReasons);
+      const cup = getResults(next, QUESTIONS, adjustments, RETRY_WORLDCUP_SIZE, contextReasons, eatenRef.current);
       if (cup.length >= 2) {
         setWorldCupResults(cup);
         setGameState('worldcup');
