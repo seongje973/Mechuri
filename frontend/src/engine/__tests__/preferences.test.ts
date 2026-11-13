@@ -3,7 +3,8 @@ import { QUESTIONS } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
 import { getResults, toRecommendSession } from '../recommendFlow';
 import { mergeReasons } from '../context';
-import { EMPTY_PREFERENCES, learnedCuisines, normalizePreferences, preferenceAdjustments } from '../preferences';
+import { EMPTY_PREFERENCES, learnedCuisines, normalizePreferences, preferenceAdjustments, profileAdjustments } from '../preferences';
+import { PROFILE_MAX_BONUS } from '../config';
 
 const now = new Date('2026-11-10T12:00:00Z').getTime();
 const daysAgo = (d: number) => new Date(now - d * 24 * 60 * 60 * 1000).toISOString();
@@ -88,5 +89,40 @@ describe('mergeReasons', () => {
       우동: ['비 오는 날엔 국물', '좋아하는 일식'],
       초밥: ['좋아하는 일식'],
     });
+  });
+});
+
+describe('profileAdjustments (기록에서 배운 속성별 취향)', () => {
+  const soups = ['김치찌개', '된장찌개', '육개장', '칼국수', '갈비탕', '순대국밥'];
+  const meals = soups.map((menuName, i) => ({ menuName, createdAt: daysAgo(i + 1) }));
+  const menu = (name: string) => MENU_DATA.find(m => m.name === name)!;
+
+  it('국물 메뉴만 먹었으면 국물 메뉴는 오르고 국물 없는 메뉴는 내린다', () => {
+    const { adjustments, reasons } = profileAdjustments(MENU_DATA, meals, now);
+    expect(adjustments['삼계탕']).toBeGreaterThan(0);
+    expect(adjustments['삼겹살']).toBeLessThan(0);
+    expect(reasons['삼계탕']).toEqual(['요즘 자주 먹는 국물']);
+    expect(Math.max(...Object.values(adjustments).map(Math.abs))).toBeLessThanOrEqual(PROFILE_MAX_BONUS);
+  });
+
+  it('기록이 5개 미만이거나 30일이 지났으면 배우지 않는다', () => {
+    expect(profileAdjustments(MENU_DATA, meals.slice(0, 4), now).adjustments).toEqual({});
+    const old = soups.map(menuName => ({ menuName, createdAt: daysAgo(40) }));
+    expect(profileAdjustments(MENU_DATA, old, now).adjustments).toEqual({});
+  });
+
+  it('매운맛 취향을 직접 골랐으면 맵기는 기록에서 배우지 않는다', () => {
+    const spicy = MENU_DATA.filter(m => m.spicy >= 2).slice(0, 6).map((m, i) => ({ menuName: m.name, createdAt: daysAgo(i + 1) }));
+    // 맵기만 다른 두 메뉴의 보정 차이로 확인한다
+    const gap = (adj: Record<string, number>) => (adj['김치찌개'] ?? 0) - (adj['된장찌개'] ?? 0);
+    expect(menu('김치찌개').spicy).toBeGreaterThanOrEqual(2);
+    expect(gap(profileAdjustments(MENU_DATA, spicy, now).adjustments)).toBeGreaterThan(0);
+    expect(gap(profileAdjustments(MENU_DATA, spicy, now, false).adjustments)).toBe(0);
+  });
+
+  it('preferenceAdjustments에 함께 더해진다', () => {
+    const { adjustments, reasons } = preferenceAdjustments(MENU_DATA, EMPTY_PREFERENCES, meals, now);
+    expect(adjustments['삼겹살']).toBeLessThan(0);
+    expect(reasons['삼계탕']).toContain('요즘 자주 먹는 국물');
   });
 });

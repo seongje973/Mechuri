@@ -65,3 +65,12 @@ export const LEARN_MIN_SHARE = 0.4;
 /** 매운맛 취향: "매운 거 좋아요"면 맵기 2 이상 메뉴 보너스, "안 매운 게 좋아요"면 맵기 1당 감점 */
 export const SPICY_LOVER_BONUS = 1;
 export const SPICY_MILD_PENALTY_PER_LEVEL = -0.5;
+
+/** 기록에서 배우는 속성별 취향(주재료·국물·맵기·무게·온도). 이만큼은 먹은 기록이 있어야 배운다 */
+export const PROFILE_MIN_MEALS = 5;
+/** (내 기록에서의 비율 - 전체 메뉴에서의 비율) 1.0당 점수 */
+export const PROFILE_WEIGHT = 2;
+/** 속성별 취향 보정은 메뉴 하나에 이 값까지만 (위·아래 모두) */
+export const PROFILE_MAX_BONUS = 1.5;
+/** 비율 차이가 이만큼은 나야 결과 이유 칩에 쓴다 */
+export const PROFILE_REASON_LIFT = 0.2;
