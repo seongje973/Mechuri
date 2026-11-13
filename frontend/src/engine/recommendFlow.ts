@@ -160,10 +160,11 @@ export const shouldStop = (
 ): boolean => {
   if (session.answers.length >= session.questionLimit) return true;
   const ranked = rankAdjusted(session, adjustments);
-  const asked = askedIds(session);
+  // "상관없어"는 점수를 바꾸지 않으므로 답한 것으로 치지 않는다
+  const answered = new Set(session.answers.filter(a => a.answer !== 'dontcare').map(a => a.questionId));
   if (
     session.answers.length >= session.minAnswers &&
-    questions.some(q => q.kind === 'taste' && asked.has(q.id)) &&
+    questions.some(q => q.kind === 'taste' && answered.has(q.id)) &&
     ranked.length >= 2 &&
     ranked[0].finalScore - ranked[1].finalScore >= STOP_LEAD
   ) {
@@ -239,6 +240,7 @@ export interface RecommendResult extends RankedMenu {
 
 /**
  * 1위 + 대안 2개와 추천 이유. 대안은 이미 고른 메뉴와 비슷한 메뉴를 건너뛰고 고른다 (모자라면 건너뛴 것으로 채움).
+ * 기본 개수보다 많이 달라고 하면(월드컵 4개 등) 다양화와 새 메뉴 바꾸기 없이 순위 그대로 준다.
  * adjustments: 메뉴 이름 → 점수 보정 (최근 먹은 메뉴 감점 등, S4에서 즐겨찾기까지 확장)
  * size: 몇 개까지 (기본 1위 + 대안 2개, 월드컵 제안은 4개)
  * extraReasons: 메뉴 이름 → 덧붙일 이유 (날씨·시간대, 취향 보정 등)
@@ -254,15 +256,16 @@ export const getResults = (
 ): RecommendResult[] => {
   const byId = new Map(questions.map(q => [q.id, q]));
   const ranked = rankAdjusted(session, adjustments);
+  const diversify = size <= RESULT_SIZE;
   const picked: typeof ranked = [];
   const skipped: typeof ranked = [];
   for (const r of ranked) {
     if (picked.length >= size) break;
-    (picked.some(p => isSimilarMenu(p.item, r.item)) ? skipped : picked).push(r);
+    (diversify && picked.some(p => isSimilarMenu(p.item, r.item)) ? skipped : picked).push(r);
   }
   const results = [...picked, ...skipped.slice(0, size - picked.length)];
   let fresh: string | null = null;
-  if (results.length >= 2 && results.every(r => eaten.includes(r.item.name))) {
+  if (diversify && results.length >= 2 && results.every(r => eaten.includes(r.item.name))) {
     const last = results[results.length - 1];
     const kept = results.slice(0, -1);
     const candidate = ranked.find(

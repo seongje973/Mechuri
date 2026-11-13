@@ -115,6 +115,12 @@ describe('개인화 보정을 질문 선택과 멈춤에 반영', () => {
     expect(shouldStop(s, QUESTIONS)).toBe(false);
     expect(shouldStop(s, QUESTIONS, { 짬뽕: 2 })).toBe(true);
   });
+
+  it('취향 질문에 "상관없어"만 답했으면 보정만으로 멈추지 않는다', () => {
+    let s = start([byName('짬뽕'), byName('짜장면'), byName('돈까스')]);
+    s = answerQuestion(s, q('spicy'), 'dontcare');
+    expect(shouldStop(s, QUESTIONS, { 짬뽕: 5 })).toBe(false);
+  });
 });
 
 describe('멈추는 조건 (US-12)', () => {
@@ -189,6 +195,12 @@ describe('결과와 추천 이유 (US-12)', () => {
     const menus = [byName('김치찌개'), byName('된장찌개'), byName('초밥'), byName('피자')];
     expect(getResults(start(menus), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
     expect(getResults(start(menus.slice(0, 3)), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '된장찌개']);
+  });
+
+  it('월드컵처럼 4개를 달라고 하면 비슷한 메뉴도 순위 그대로 준다', () => {
+    const menus = [byName('김치찌개'), byName('된장찌개'), byName('초밥'), byName('피자'), byName('짜장면')];
+    const names = menus.map(m => m.name);
+    expect(getResults(start(menus), QUESTIONS, {}, RETRY_WORLDCUP_SIZE, {}, names).map(r => r.item.name)).toEqual(names.slice(0, 4));
   });
 
   it('결과가 모두 먹어 본 메뉴면 마지막 대안을 안 먹어 본 메뉴로 바꾼다', () => {
