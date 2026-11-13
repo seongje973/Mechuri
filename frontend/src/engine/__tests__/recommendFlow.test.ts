@@ -1,5 +1,5 @@
 import { MENU_DATA, MenuItem } from '../../constants/menuData';
-import { QUESTIONS, Question } from '../../constants/akinatorQuestions';
+import { QUESTIONS, Question, matchesQuestion } from '../../constants/akinatorQuestions';
 import { createScoreSession } from '../scoreEngine';
 import { MAX_QUESTIONS, MAX_REASON_CHIPS, RETRY_EXTRA_QUESTIONS, RETRY_MIN_QUESTIONS, RETRY_WORLDCUP_SIZE, ScoreAnswer } from '../config';
 import {
@@ -71,6 +71,34 @@ describe('다음 질문 고르기 (US-11)', () => {
       results.forEach(r => expect(r.reasons.length).toBeGreaterThan(0));
     }
     expect(totalQuestions / 100).toBeLessThanOrEqual(MAX_QUESTIONS);
+  });
+});
+
+describe('개인화 보정을 질문 선택과 멈춤에 반영', () => {
+  it('보정으로 앞선 메뉴들을 나누는 질문을 고른다', () => {
+    const rice = MENU_DATA.filter(m => m.base === 'rice');
+    const boost = Object.fromEntries(rice.map(m => [m.name, 5]));
+    const next = (adj?: Record<string, number>) => {
+      let cur = start();
+      // 상황 질문 2개는 건너뛴다
+      for (let i = 0; i < 2; i++) cur = answerQuestion(cur, pickNextQuestion(cur, QUESTIONS, adj)!, 'dontcare');
+      return pickNextQuestion(cur, QUESTIONS, adj)!;
+    };
+    expect(next().id).toBe('base-rice');
+    // 상위 후보가 모두 밥 메뉴면 밥 질문은 묻지 않고, 밥 메뉴 안에서 갈리는 질문을 고른다
+    const picked = next(boost);
+    expect(picked.id).not.toBe('base-rice');
+    const yes = rice.filter(m => matchesQuestion(m, picked)).length;
+    expect(yes).toBeGreaterThan(0);
+    expect(yes).toBeLessThan(rice.length);
+  });
+
+  it('보정까지 더해 3점 이상 앞서면 멈춘다. 취향 질문에 답하기 전에는 보정만으로 멈추지 않는다', () => {
+    let s = start([byName('짬뽕'), byName('짜장면'), byName('돈까스')]);
+    expect(shouldStop(s, QUESTIONS, { 짬뽕: 5 })).toBe(false);
+    s = answerQuestion(s, q('spicy'), 'probably'); // 짬뽕 +1, 나머지 0
+    expect(shouldStop(s, QUESTIONS)).toBe(false);
+    expect(shouldStop(s, QUESTIONS, { 짬뽕: 2 })).toBe(true);
   });
 });
 

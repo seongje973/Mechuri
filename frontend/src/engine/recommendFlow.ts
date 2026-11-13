@@ -79,13 +79,25 @@ export const answerQuestion = (session: RecommendSession, q: Question, answer: S
   };
 };
 
+/** 보정까지 더한 순위. 동점이면 엔진 순위를 따른다 */
+const rankAdjusted = (session: RecommendSession, adjustments: Record<string, number>) =>
+  rankCandidates(session)
+    .map((r, index) => ({ ...r, index, finalScore: r.score + (adjustments[r.item.name] ?? 0) }))
+    .sort((a, b) => b.finalScore - a.finalScore || a.index - b.index)
+    .map(({ index, ...r }) => r);
+
 /**
  * 다음 질문.
  * 1. 상황 질문을 최대 2개, 정의된 순서대로 (후보를 실제로 나누는 것만)
  * 2. 취향 질문 중 상위 후보들의 점수 합을 가장 반반에 가깝게 나누는 것. 동점이면 정의 순서.
  * 더 물을 질문이 없으면 null.
+ * adjustments: 메뉴 이름 → 개인화 보정. 주면 보정을 더한 순위로 상위 후보를 고른다 (이미 아는 취향은 덜 묻게).
  */
-export const pickNextQuestion = (session: RecommendSession, questions: Question[]): Question | null => {
+export const pickNextQuestion = (
+  session: RecommendSession,
+  questions: Question[],
+  adjustments: Record<string, number> = {}
+): Question | null => {
   const asked = askedIds(session);
   const situationAsked = questions.filter(q => q.kind === 'situation' && asked.has(q.id)).length;
 
@@ -96,11 +108,11 @@ export const pickNextQuestion = (session: RecommendSession, questions: Question[
     if (situation) return situation;
   }
 
-  const top = rankCandidates(session).slice(0, SPLIT_TOP_N);
+  const top = rankAdjusted(session, adjustments).slice(0, SPLIT_TOP_N);
   if (top.length < 2) return null;
-  const minScore = Math.min(...top.map(r => r.score));
+  const minScore = Math.min(...top.map(r => r.finalScore));
   // 점수가 높은 후보일수록 무게를 더 준다 (최하위도 1)
-  const weighted = top.map(r => ({ item: r.item, weight: r.score - minScore + 1 }));
+  const weighted = top.map(r => ({ item: r.item, weight: r.finalScore - minScore + 1 }));
   const total = weighted.reduce((sum, w) => sum + w.weight, 0);
 
   let best: Question | null = null;
@@ -118,18 +130,27 @@ export const pickNextQuestion = (session: RecommendSession, questions: Question[
   return best;
 };
 
-/** 멈춤 조건: 1위가 2위보다 3점 이상 앞섬 · 질문 한도(처음 7문항) · 남은 질문 없음 */
-export const shouldStop = (session: RecommendSession, questions: Question[]): boolean => {
+/**
+ * 멈춤 조건: 1위가 2위보다 3점 이상 앞섬 · 질문 한도(처음 7문항) · 남은 질문 없음.
+ * 개인화 보정(adjustments)도 점수 차이에 넣지만, 보정만으로는 멈추지 않도록 취향 질문에 하나는 답한 뒤에만 본다.
+ */
+export const shouldStop = (
+  session: RecommendSession,
+  questions: Question[],
+  adjustments: Record<string, number> = {}
+): boolean => {
   if (session.answers.length >= session.questionLimit) return true;
-  const ranked = rankCandidates(session);
+  const ranked = rankAdjusted(session, adjustments);
+  const asked = askedIds(session);
   if (
     session.answers.length >= session.minAnswers &&
+    questions.some(q => q.kind === 'taste' && asked.has(q.id)) &&
     ranked.length >= 2 &&
-    ranked[0].score - ranked[1].score >= STOP_LEAD
+    ranked[0].finalScore - ranked[1].finalScore >= STOP_LEAD
   ) {
     return true;
   }
-  return pickNextQuestion(session, questions) === null;
+  return pickNextQuestion(session, questions, adjustments) === null;
 };
 
 /** 메뉴가 2개 이상 남아야 "틀렸어요"로 하나를 뺄 수 있다 */
@@ -149,13 +170,6 @@ export const rejectTopResult = (session: RecommendSession, menuName: string): Re
     minAnswers: session.answers.length + RETRY_MIN_QUESTIONS,
   };
 };
-
-/** 보정까지 더한 순위. 동점이면 엔진 순위를 따른다 */
-const rankAdjusted = (session: RecommendSession, adjustments: Record<string, number>) =>
-  rankCandidates(session)
-    .map((r, index) => ({ ...r, index, finalScore: r.score + (adjustments[r.item.name] ?? 0) }))
-    .sort((a, b) => b.finalScore - a.finalScore || a.index - b.index)
-    .map(({ index, ...r }) => r);
 
 /** 두 번째 "틀렸어요" 뒤 제안하는 월드컵 후보: 남은 후보 중 상위 4개 */
 export const worldCupCandidates = (

@@ -106,6 +106,9 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
   // 질문 화면에 떠 있는 판을 시작한 요청 번호. startRequestRef보다 작으면 새 시작이 진행 중이다
   const activeStartRequestRef = useRef(0);
   const weatherPromiseRef = useRef<Promise<void> | null>(null);
+  // 추천을 시작할 때 읽기 시작하는 개인화 보정. 다 읽으면 다음 질문 고르기와 멈춤 판단에도 쓴다
+  const personalPromiseRef = useRef<ReturnType<typeof loadAdjustments> | null>(null);
+  const priorRef = useRef<Record<string, number>>({});
   // 이번 결과에서 "먹을래요"로 저장한 메뉴들 (여러 메뉴의 저장이 엇갈려 끝나도 표시가 지워지지 않게)
   const [eatenMenus, setEatenMenus] = useState<string[]>([]);
   const [favorited, setFavorited] = useState(false);
@@ -262,6 +265,12 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     const coords = userCoordsRef.current;
     weatherPromiseRef.current = coords ? loadWeather(coords, weatherRoundRef.current) : null;
     finishTokenRef.current += 1;
+    priorRef.current = {};
+    const personal = loadAdjustments();
+    personalPromiseRef.current = personal;
+    personal.then(p => {
+      if (personalPromiseRef.current === personal) priorRef.current = p.adjustments;
+    });
     analyticsSessionRef.current = newSessionId();
     track(analyticsSessionRef.current, { type: 'rec_start', payload: { autoStart: auto, excluded } });
 
@@ -273,7 +282,8 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
 
   // 다음 질문으로 가거나, 멈출 조건이면 결과로
   const goNext = (next: RecommendSession) => {
-    const question = shouldStop(next, QUESTIONS) ? null : pickNextQuestion(next, QUESTIONS);
+    const prior = priorRef.current;
+    const question = shouldStop(next, QUESTIONS, prior) ? null : pickNextQuestion(next, QUESTIONS, prior);
     if (question) {
       setCurrentQuestion(question);
     } else {
@@ -399,7 +409,7 @@ export default function RecommendScreen({ navigation, route, isLoggedIn, userPro
     if (finalSession.rejected.length === 0) {
       await waitForWeather();
       const context = contextAdjustments(MENU_DATA, { hour: new Date().getHours(), weather: weatherRef.current });
-      const personal = await loadAdjustments();
+      const personal = await (personalPromiseRef.current ?? loadAdjustments());
       // 날씨·보정값을 기다리는 사이 새 추천을 시작했거나, 답을 되돌렸거나, 화면을 떠났으면 이전 결과를 띄우지 않는다
       if (
         token !== finishTokenRef.current ||
