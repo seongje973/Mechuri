@@ -140,7 +140,8 @@ describe('결과와 추천 이유 (US-12)', () => {
     expect(top.item.soup).toBe(true);
     expect(top.item.spicy).toBeLessThan(2);
     expect(top.item.base).toBe('rice');
-    expect(top.reasons).toEqual(['국물 O', '밥', '안 매운 맛']);
+    // 주재료 질문은 배율이 커서 이유도 먼저 나온다
+    expect(top.reasons).toEqual(['밥', '국물 O', '안 매운 맛']);
     // 칩마다 그 메뉴의 양(+) 점수 근거가 있다
     results.forEach(r => {
       expect(r.contributions.filter(c => c.delta > 0).length).toBeGreaterThanOrEqual(Math.min(r.reasons.length, 1));

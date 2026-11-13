@@ -18,6 +18,12 @@ export const ANSWER_SCORES: Record<ScoreAnswer, { match: number; miss: number }>
  */
 export const NEAR_MATCH_LEVEL = 0.25;
 
+/**
+ * 질문 속성별 점수 배율 (없으면 1). 밥·면·고기 같은 주재료는 크게, 가볍게·든든하게는 작게 반영한다.
+ * 키는 Question.attribute.
+ */
+export const ATTRIBUTE_WEIGHTS: Record<string, number> = { base: 1.5, weight: 0.5 };
+
 /** 질문은 최대 7개 (기획서 제품 원칙) */
 export const MAX_QUESTIONS = 7;
 /** 1위가 2위보다 이만큼 앞서면 바로 결과를 보여준다 */
