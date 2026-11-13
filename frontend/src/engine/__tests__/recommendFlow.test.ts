@@ -168,6 +168,13 @@ describe('결과와 추천 이유 (US-12)', () => {
     expect(withContext.reasons[MAX_REASON_CHIPS - 1]).toBe('비 오는 날엔 국물');
   });
 
+  it('대안은 이미 고른 메뉴와 비슷한 메뉴를 건너뛴다. 모자라면 건너뛴 메뉴로 채운다', () => {
+    // 김치찌개와 된장찌개는 맵기만 다르다
+    const menus = [byName('김치찌개'), byName('된장찌개'), byName('초밥'), byName('피자')];
+    expect(getResults(start(menus), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '피자']);
+    expect(getResults(start(menus.slice(0, 3)), QUESTIONS).map(r => r.item.name)).toEqual(['김치찌개', '초밥', '된장찌개']);
+  });
+
   it('아무 답도 점수를 올리지 않았으면 나라별 분류를 이유로 보여준다', () => {
     const results = getResults(start(), QUESTIONS);
     results.forEach(r => expect(r.reasons).toEqual([r.item.category]));

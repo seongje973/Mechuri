@@ -13,6 +13,7 @@ import {
   ScoreAnswer,
 } from './config';
 import { RankedMenu, ScoreSession, applyScoreAnswer, rankCandidates } from './scoreEngine';
+import { isSimilarMenu } from './similarity';
 
 /**
  * 질문 순서, 상황 질문 필터, 멈춤 조건, 결과와 추천 이유 (S2, US-11 · US-12).
@@ -185,7 +186,7 @@ export interface RecommendResult extends RankedMenu {
 }
 
 /**
- * 1위 + 대안 2개와 추천 이유.
+ * 1위 + 대안 2개와 추천 이유. 대안은 이미 고른 메뉴와 비슷한 메뉴를 건너뛰고 고른다 (모자라면 건너뛴 것으로 채움).
  * adjustments: 메뉴 이름 → 점수 보정 (최근 먹은 메뉴 감점 등, S4에서 즐겨찾기까지 확장)
  * size: 몇 개까지 (기본 1위 + 대안 2개, 월드컵 제안은 4개)
  * extraReasons: 메뉴 이름 → 덧붙일 이유 (날씨·시간대, 취향 보정 등)
@@ -198,8 +199,14 @@ export const getResults = (
   extraReasons: Record<string, string | string[]> = {}
 ): RecommendResult[] => {
   const byId = new Map(questions.map(q => [q.id, q]));
-  return rankAdjusted(session, adjustments)
-    .slice(0, size)
+  const ranked = rankAdjusted(session, adjustments);
+  const picked: typeof ranked = [];
+  const skipped: typeof ranked = [];
+  for (const r of ranked) {
+    if (picked.length >= size) break;
+    (picked.some(p => isSimilarMenu(p.item, r.item)) ? skipped : picked).push(r);
+  }
+  return [...picked, ...skipped.slice(0, size - picked.length)]
     .map(r => {
       const tasteReasons = r.contributions
         .filter(c => c.delta > 0)

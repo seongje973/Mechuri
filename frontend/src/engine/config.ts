@@ -74,3 +74,9 @@ export const PROFILE_WEIGHT = 2;
 export const PROFILE_MAX_BONUS = 1.5;
 /** 비율 차이가 이만큼은 나야 결과 이유 칩에 쓴다 */
 export const PROFILE_REASON_LIFT = 0.2;
+
+/** 6개 속성(나라·주재료·국물·맵기·온도·무게) 중 이만큼 같으면 "비슷한 메뉴"로 본다 */
+export const SIMILAR_MIN_SHARED = 5;
+/** 최근에 먹은 메뉴와 비슷한 메뉴 감점. 같은 메뉴 감점(RECENT_MEAL_PENALTY)보다 약하고 짧게 */
+export const SIMILAR_MEAL_PENALTY = -1;
+export const SIMILAR_MEAL_DAYS = 2;
