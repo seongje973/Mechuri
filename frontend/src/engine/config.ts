@@ -30,8 +30,11 @@ export const MAX_QUESTIONS = 7;
 export const STOP_LEAD = 3;
 /** 맨 앞에 묻는 상황 질문 수 (인원·먹는 방식·예산 중) */
 export const SITUATION_QUESTION_LIMIT = 2;
-/** 다음 질문을 고를 때 반반으로 나눌 상위 후보 수 */
-export const SPLIT_TOP_N = 10;
+/**
+ * 다음 질문을 고를 때 점수를 "이 메뉴를 원할 확률"로 바꾸는 온도. 점수가 이만큼 높으면 확률이 e배.
+ * 작을수록 상위 후보만 보고 질문을 고른다.
+ */
+export const QUESTION_TEMPERATURE = 1;
 /** 결과에 보여줄 메뉴 수 (1위 + 대안 2개) */
 export const RESULT_SIZE = 3;
 /** "바로 결과 보기" 버튼을 보여주기 시작하는 질문 번호 */

@@ -74,6 +74,20 @@ describe('다음 질문 고르기 (US-11)', () => {
   });
 });
 
+describe('기대 효과로 질문 고르기', () => {
+  it('상위 10개가 똑같아도 전체 후보를 나누는 질문이 있으면 묻는다', () => {
+    const clones = Array.from({ length: 10 }, (_, i) => ({ ...byName('규동'), name: `규동 ${i}` }));
+    let s = start([...clones, byName('짬뽕')]);
+    let next = pickNextQuestion(s, QUESTIONS);
+    while (next && next.kind === 'situation') {
+      s = answerQuestion(s, next, 'dontcare');
+      next = pickNextQuestion(s, QUESTIONS);
+    }
+    expect(next).not.toBeNull();
+    expect(matchesQuestion(byName('짬뽕'), next!)).not.toBe(matchesQuestion(byName('규동'), next!));
+  });
+});
+
 describe('개인화 보정을 질문 선택과 멈춤에 반영', () => {
   it('보정으로 앞선 메뉴들을 나누는 질문을 고른다', () => {
     const rice = MENU_DATA.filter(m => m.base === 'rice');

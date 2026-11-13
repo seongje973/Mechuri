@@ -7,8 +7,8 @@ import {
   RETRY_EXTRA_QUESTIONS,
   RETRY_MIN_QUESTIONS,
   RETRY_WORLDCUP_SIZE,
+  QUESTION_TEMPERATURE,
   SITUATION_QUESTION_LIMIT,
-  SPLIT_TOP_N,
   STOP_LEAD,
   ScoreAnswer,
 } from './config';
@@ -87,12 +87,30 @@ const rankAdjusted = (session: RecommendSession, adjustments: Record<string, num
     .sort((a, b) => b.finalScore - a.finalScore || a.index - b.index)
     .map(({ index, ...r }) => r);
 
+/** 점수를 확률로 바꾼다 (softmax). 메뉴 이름 → 확률 */
+const menuProbabilities = (session: ScoreSession, adjustments: Record<string, number>): Map<string, number> => {
+  const scores = session.candidates.map(item => (session.scores[item.name] + (adjustments[item.name] ?? 0)) / QUESTION_TEMPERATURE);
+  const max = Math.max(...scores);
+  const weights = scores.map(v => Math.exp(v - max));
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  return new Map(session.candidates.map((item, i) => [item.name, weights[i] / total]));
+};
+
+const entropy = (probabilities: Map<string, number>): number => {
+  let h = 0;
+  probabilities.forEach(p => {
+    if (p > 0) h -= p * Math.log(p);
+  });
+  return h;
+};
+
 /**
  * 다음 질문.
  * 1. 상황 질문을 최대 2개, 정의된 순서대로 (후보를 실제로 나누는 것만)
- * 2. 취향 질문 중 상위 후보들의 점수 합을 가장 반반에 가깝게 나누는 것. 동점이면 정의 순서.
+ * 2. 취향 질문 중 답을 들은 뒤 후보가 가장 많이 좁혀질 것으로 기대되는 것. 동점이면 정의 순서.
+ *    점수를 확률로 보고, "응"·"아니" 각각의 답 뒤에 남는 불확실성(엔트로피)의 기댓값이 가장 작은 질문을 고른다.
  * 더 물을 질문이 없으면 null.
- * adjustments: 메뉴 이름 → 개인화 보정. 주면 보정을 더한 순위로 상위 후보를 고른다 (이미 아는 취향은 덜 묻게).
+ * adjustments: 메뉴 이름 → 개인화 보정. 주면 보정을 더한 점수로 고른다 (이미 아는 취향은 덜 묻게).
  */
 export const pickNextQuestion = (
   session: RecommendSession,
@@ -109,22 +127,20 @@ export const pickNextQuestion = (
     if (situation) return situation;
   }
 
-  const top = rankAdjusted(session, adjustments).slice(0, SPLIT_TOP_N);
-  if (top.length < 2) return null;
-  const minScore = Math.min(...top.map(r => r.finalScore));
-  // 점수가 높은 후보일수록 무게를 더 준다 (최하위도 1)
-  const weighted = top.map(r => ({ item: r.item, weight: r.finalScore - minScore + 1 }));
-  const total = weighted.reduce((sum, w) => sum + w.weight, 0);
+  if (session.candidates.length < 2) return null;
+  const current = menuProbabilities(session, adjustments);
 
   let best: Question | null = null;
-  let bestGap = Infinity;
+  let bestExpected = Infinity;
   questions.forEach(q => {
-    if (q.kind !== 'taste' || asked.has(q.id)) return;
-    const matched = weighted.filter(w => matchesQuestion(w.item, q)).reduce((sum, w) => sum + w.weight, 0);
-    if (matched === 0 || matched === total) return; // 상위 후보를 전혀 나누지 못하는 질문은 묻지 않는다
-    const gap = Math.abs(2 * matched - total);
-    if (gap < bestGap) {
-      bestGap = gap;
+    // 후보를 전혀 나누지 못하는 질문은 묻지 않는다
+    if (q.kind !== 'taste' || asked.has(q.id) || !splitsCandidates(session.candidates, q)) return;
+    const yesChance = session.candidates.reduce((sum, item) => sum + (matchesQuestion(item, q) ? current.get(item.name)! : 0), 0);
+    const after = (answer: ScoreAnswer) => entropy(menuProbabilities(applyScoreAnswer(session, q, answer, true), adjustments));
+    const expected = yesChance * after('yes') + (1 - yesChance) * after('no');
+    // 부동소수 오차로 정의 순서가 뒤집히지 않게 아주 작은 차이는 동점으로 본다
+    if (expected < bestExpected - 1e-9) {
+      bestExpected = expected;
       best = q;
     }
   });
